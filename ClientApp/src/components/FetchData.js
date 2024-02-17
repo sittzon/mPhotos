@@ -17,17 +17,19 @@ export class FetchData extends Component {
       <table className="table table-striped" aria-labelledby="tableLabel">
         <thead>
           <tr>
+            <th>Guid</th>
+            <th>Name</th>
+            <th>Size</th>
             <th>Date</th>
-            {/* <th>Name</th>
-            <th>Guid</th> */}
           </tr>
         </thead>
         <tbody>
           {forecasts.map(forecast =>
             <tr key={forecast.guid}>
-              {/* <td>{forecast.date}</td>
-              <td>{forecast.name}</td> */}
               <td>{forecast.guid}</td>
+              <td>{forecast.name}</td>
+              <td>{forecast.sizekb}</td>
+              <td>{forecast.date}</td>
             </tr>
           )}
         </tbody>
@@ -42,8 +44,7 @@ export class FetchData extends Component {
 
     return (
       <div>
-        <h1 id="tableLabel">Image guids</h1>
-        <p>This component demonstrates fetching data from the server.</p>
+        <h1 id="tableLabel">Image metadata</h1>
         {contents}
       </div>
     );
