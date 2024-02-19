@@ -5,31 +5,31 @@ export class FetchData extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { forecasts: [], loading: true };
+    this.state = { images: [], loading: true };
   }
 
   componentDidMount() {
     this.populateData();
   }
 
-  static renderTable(forecasts) {
+  static renderTable(images) {
     return (
       <table className="table table-striped" aria-labelledby="tableLabel">
         <thead>
           <tr>
             <th>Guid</th>
-            <th>Name</th>
+            <th>Location</th>
             <th>Size</th>
-            <th>Date</th>
+            <th>Date Taken</th>
           </tr>
         </thead>
         <tbody>
-          {forecasts.map(forecast =>
-            <tr key={forecast.guid}>
-              <td>{forecast.guid}</td>
-              <td>{forecast.name}</td>
-              <td>{forecast.sizekb}</td>
-              <td>{forecast.date}</td>
+          {images.map(image =>
+            <tr key={image.guid}>
+              <td>{image.guid}</td>
+              <td>{image.location}</td>
+              <td>{image.sizekb}</td>
+              <td>{image.datetaken}</td>
             </tr>
           )}
         </tbody>
@@ -40,7 +40,7 @@ export class FetchData extends Component {
   render() {
     let contents = this.state.loading
       ? <p><em>Loading...</em></p>
-      : FetchData.renderTable(this.state.forecasts);
+      : FetchData.renderTable(this.state.images);
 
     return (
       <div>
@@ -53,6 +53,6 @@ export class FetchData extends Component {
   async populateData() {
     const response = await fetch('photo');
     const data = await response.json();
-    this.setState({ forecasts: data, loading: false });
+    this.setState({ images: data, loading: false });
   }
 }

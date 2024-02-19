@@ -6,10 +6,7 @@ namespace mPhotos.Controllers;
 [Route("[controller]")]
 public class LibraryController : ControllerBase
 {
-    private static readonly List<string> PhotoGuids = new List<string>()
-    {
-        "535e4538-e49e-45fd-bb34-c2f85c6cd82b", "6458f33e-8905-434f-a750-e0222fa7c2fa"
-    };
+    private static readonly string imgPath = @"/Users/magnusedetorn/Desktop/testbilder/";
 
     private readonly ILogger<LibraryController> _logger;
 
@@ -21,10 +18,11 @@ public class LibraryController : ControllerBase
     [HttpGet]
     public LibraryMeta Get()
     {
+        string[] fileNames = Directory.GetFiles(imgPath);
         return new LibraryMeta
         {
             LatestIndexTime = DateTime.Now,
-            TotalPhotosNo = PhotoGuids.Count,
+            TotalPhotosNo = fileNames.Count(),
             TotalSizeMb = 100
         };
     }
