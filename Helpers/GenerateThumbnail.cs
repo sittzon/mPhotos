@@ -34,7 +34,8 @@ public class ImageHelper
         DateTime? dateTaken = null;
         using (Image image = Image.Load(imageData)) {
             var metaDate = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.DateTimeOriginal);
-            if (DateTime.TryParseExact(metaDate.ToString(), "yyyy:MM:dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dateTakenValue)) {
+            if (metaDate != null && 
+                DateTime.TryParseExact(metaDate.ToString(), "yyyy:MM:dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dateTakenValue)) {
                 dateTaken = dateTakenValue;
             }
         }
