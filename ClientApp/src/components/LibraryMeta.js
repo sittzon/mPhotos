@@ -5,29 +5,35 @@ export class LibraryMeta extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { libmeta: {}, loading: true };
+    this.state = { images: [], loading: true };
   }
 
   componentDidMount() {
     this.populateData();
   }
 
-  static renderTable(libmeta) {
+  static renderTable(images) {
     return (
       <table className="table table-striped" aria-labelledby="tableLabel">
         <thead>
-          <tr>
-            <th>Total photos</th>
-            <th>Total Size (Mb)</th>
-            <th>Latest Index Time</th>
+          <tr key="header">
+            <th>Guid</th>
+            <th>Location</th>
+            <th>Name</th>
+            <th>Size</th>
+            <th>Date Taken</th>
           </tr>
         </thead>
         <tbody>
-          <tr key={libmeta.latestindextime}>
-            <td>{libmeta.totalphotosno}</td>
-            <td>{libmeta.totalsizemb}</td>
-            <td>{libmeta.latestindextime}</td>
-          </tr>
+          {images.map(image =>
+            <tr key={image.guid}>
+              <td>{image.guid}</td>
+              <td>{image.location}</td>
+              <td>{image.name}</td>
+              <td>{image.sizekb}</td>
+              <td>{image.datetaken}</td>
+            </tr>
+          )}
         </tbody>
       </table>
     );
@@ -36,19 +42,19 @@ export class LibraryMeta extends Component {
   render() {
     let contents = this.state.loading
       ? <p><em>Loading...</em></p>
-      : LibraryMeta.renderTable(this.state.libmeta);
+      : LibraryMeta.renderTable(this.state.images);
 
     return (
       <div>
-        <h1 id="tableLabel">Library metadata</h1>
+        <h1 id="tableLabel">Image metadata</h1>
         {contents}
       </div>
     );
   }
 
   async populateData() {
-    const response = await fetch('library');
+    const response = await fetch('photo');
     const data = await response.json();
-    this.setState({ libmeta: data, loading: false });
+    this.setState({ images: data, loading: false });
   }
 }

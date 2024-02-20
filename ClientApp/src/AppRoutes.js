@@ -1,7 +1,6 @@
 import { Counter } from "./components/Counter";
-import { FetchData } from "./components/FetchData";
-import { Home } from "./components/Home";
 import { LibraryMeta } from "./components/LibraryMeta";
+import { Home } from "./components/Home";
 
 const AppRoutes = [
   {
@@ -14,10 +13,6 @@ const AppRoutes = [
   },
   {
     path: '/photo-meta',
-    element: <FetchData />
-  },
-  {
-    path: '/lib-meta',
     element: <LibraryMeta />
   }
 ];
