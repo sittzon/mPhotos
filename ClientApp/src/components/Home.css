@@ -15,3 +15,19 @@
 .align-right {
   text-align: right;
 }
+
+.txt-sm {
+  font-size: small;
+}
+
+.txt-ww {
+  word-wrap: break-word;
+}
+
+.__react_modal_image__medium_img {
+  /* height: 100% */
+}
+
+.container {
+  max-width: 2145px;
+}

@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { Component, useState } from 'react';
 import ModalImage from "react-modal-image";
 // import { useHotkeys } from 'react-hotkeys-hook'
 import './Home.css';
@@ -8,8 +8,10 @@ export class Home extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { images: [], metaData: [], showImageName: false, loading: true };
+    this.state = { images: [], metaData: [], showImageName: false, loading: true, sortOrder: false, columns: 3};
     this.toggleImageName = this.toggleImageName.bind(this);
+    this.sortImagesByDate = this.sortImagesByDate.bind(this);
+    this.toggleColumns = this.toggleColumns.bind(this);
   }
 
   componentDidMount() {
@@ -23,27 +25,39 @@ export class Home extends Component {
   };
   
   async populateData() {
-    const response = await fetch('photo');
+    const response = await fetch('photos/metadata');
     const metaData = await response.json();
     this.setState({ metaData: metaData });
     
     let localImages = [];
-    await Promise.all(metaData.map(async meta => {
-      const response = await fetch('photo/' + meta.guid + '/thumb');
+    metaData.map(async meta => {
+      const response = await fetch('photos/' + meta.guid + '/thumb');
       const data = await response.blob();
       localImages.push({image: data, metaData: meta});
       this.setState({ images: localImages, loading: false})
-    }))
-    .then((result) => {
-      localImages = localImages.sort((a, b) => a.metaData.guid < b.metaData.guid);
-      this.setState({ images: localImages, loading: false})
     });
-
-    console.log("images.length: " + localImages.length);
   }
-
+  
   toggleImageName() {
     this.setState({ showImageName: !this.state.showImageName });
+  }
+
+  toggleColumns() {
+    const columns = this.state.columns === 3? 
+    5 : this.state.columns === 5? 7 : 
+    3;
+    this.setState({ columns: columns });
+  }
+  
+  sortImagesByDate() {
+    let sortedImages = [...this.state.images].sort((a, b) => {
+      if (this.state.sortOrder) {
+        return a.metaData.dateTaken > b.metaData.dateTaken
+      } else {
+        return a.metaData.dateTaken < b.metaData.dateTaken
+      }
+    });
+    this.setState({ images: sortedImages, sortOrder: !this.state.sortOrder});
   }
 
   render() {
@@ -53,21 +67,25 @@ export class Home extends Component {
 
     return (
       <div>
-        <button className="btn fixed btn-custom" onClick={this.toggleImageName}>Image name</button>
-        { indexing }
+        <div className="fixed">
+          <button className="btn btn-custom" onClick={this.toggleImageName}>Toggle image name</button>
+          <button className="btn btn-custom" onClick={this.sortImagesByDate}>Sort</button>
+          <button className="btn btn-custom" onClick={this.toggleColumns}>Zoom</button>
+        </div>
+            { indexing }
         <div>
-        {Home.groupByN(3, this.state.images).map(group => (
-          <div className="row align-items-center g-1 mb-1">
+        {Home.groupByN(this.state.columns, this.state.images).map((group, index) => (
+          <div key={index} className="row align-items-center g-1 mb-1">
             {group.map(image =>
-              <div className="col-4" key={image.metaData.guid}>
-                <ModalImage  key={image.metaData.guid}
+              <div className="col" key={image.metaData.guid}>
+                <ModalImage
                   small={URL.createObjectURL(image.image)}
-                  medium={"photo/" + image.metaData.guid + "/medium"}
-                  large={"photo/" + image.metaData.guid}
-                  alt={image.metaData.name + " - " + image.metaData.sizekb + "kb"}
+                  medium={"photos/" + image.metaData.guid + "/medium"}
+                  large={"photos/" + image.metaData.guid}
+                  alt={image.metaData.name + " - " + image.metaData.dateTaken}
                   showRotate="true"
                 />                
-                <span>{this.state.showImageName && image.metaData.name}</span>
+                <span className="txt-sm txt-ww">{this.state.showImageName && image.metaData.name}</span>
               </div>
             )}
           </div>

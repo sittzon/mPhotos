@@ -1,5 +1,7 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Metadata.Profiles.Exif;
+using System.Globalization;
 
 public class ImageHelper
 {
@@ -25,5 +27,17 @@ public class ImageHelper
     {
         (int width, int height) = GetImageDimensions(imageData);
         return (double)width / height;
+    }
+
+    public static DateTime? GetDateTaken(byte[] imageData)
+    {
+        DateTime? dateTaken = null;
+        using (Image image = Image.Load(imageData)) {
+            var metaDate = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.DateTimeOriginal);
+            if (DateTime.TryParseExact(metaDate.ToString(), "yyyy:MM:dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dateTakenValue)) {
+                dateTaken = dateTakenValue;
+            }
+        }
+        return dateTaken;
     }
 }

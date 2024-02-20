@@ -18,9 +18,9 @@ export class LibraryMeta extends Component {
         <thead>
           <tr key="header">
             <th>Guid</th>
-            <th>Location</th>
+            {/* <th>Location</th> */}
             <th>Name</th>
-            <th>Size</th>
+            <th>Size (kB)</th>
             <th>Date Taken</th>
           </tr>
         </thead>
@@ -28,10 +28,10 @@ export class LibraryMeta extends Component {
           {images.map(image =>
             <tr key={image.guid}>
               <td>{image.guid}</td>
-              <td>{image.location}</td>
+              {/* <td>{image.location}</td> */}
               <td>{image.name}</td>
-              <td>{image.sizekb}</td>
-              <td>{image.datetaken}</td>
+              <td>{image.sizeKb}</td>
+              <td>{image.dateTaken}</td>
             </tr>
           )}
         </tbody>
@@ -53,7 +53,7 @@ export class LibraryMeta extends Component {
   }
 
   async populateData() {
-    const response = await fetch('photo');
+    const response = await fetch('photos/metadata');
     const data = await response.json();
     this.setState({ images: data, loading: false });
   }
