@@ -1,6 +1,6 @@
 import React, { Component, useState } from 'react';
-import ModalImage from "react-modal-image";
-// import { useHotkeys } from 'react-hotkeys-hook'
+import { Gallery, Item } from 'react-photoswipe-gallery'
+import 'photoswipe/dist/photoswipe.css'
 import './Home.css';
 
 export class Home extends Component {
@@ -8,8 +8,7 @@ export class Home extends Component {
 
   constructor(props) {
     super(props);
-    this.state = { images: [], metaData: [], showImageName: false, loading: true, sortOrder: false, columns: 3};
-    this.toggleImageName = this.toggleImageName.bind(this);
+    this.state = { images: [], metaData: [], loading: true, sortOrder: false, columns: 3};
     this.sortImagesByDate = this.sortImagesByDate.bind(this);
     this.toggleColumns = this.toggleColumns.bind(this);
   }
@@ -36,10 +35,6 @@ export class Home extends Component {
       localImages.push({image: data, metaData: meta});
       this.setState({ images: localImages, loading: false})
     });
-  }
-  
-  toggleImageName() {
-    this.setState({ showImageName: !this.state.showImageName });
   }
 
   toggleColumns() {
@@ -68,28 +63,37 @@ export class Home extends Component {
     return (
       <div>
         <div className="fixed">
-          <button className="btn btn-custom" onClick={this.toggleImageName}>Toggle image name</button>
           <button className="btn btn-custom" onClick={this.sortImagesByDate}>Sort</button>
           <button className="btn btn-custom" onClick={this.toggleColumns}>Zoom</button>
         </div>
             { indexing }
         <div>
+        <Gallery withCaption id="my-gallery">
         {Home.groupByN(this.state.columns, this.state.images).map((group, index) => (
           <div key={index} className="row align-items-center g-1 mb-1">
             {group.map(image =>
               <div className="col" key={image.metaData.guid}>
-                <ModalImage
-                  small={URL.createObjectURL(image.image)}
-                  medium={"photos/" + image.metaData.guid + "/medium"}
-                  large={"photos/" + image.metaData.guid}
-                  alt={image.metaData.name + " - " + image.metaData.dateTaken}
-                  showRotate="true"
-                />                
-                <span className="txt-sm txt-ww">{this.state.showImageName && image.metaData.name}</span>
+                <Item
+                  id={image.metaData.guid}
+                  original={"photos/" + image.metaData.guid}
+                  thumbnail={URL.createObjectURL(image.image)}
+                  width={image.metaData.width}
+                  height={image.metaData.height}
+                  caption={
+                    image.metaData.dateTaken + " - " + 
+                    image.metaData.name + " - " + 
+                    image.metaData.width + "x" + image.metaData.height + " - " + 
+                    image.metaData.sizeKb + "kB"}
+                  >
+                  {({ ref, open }) => (
+                    <img ref={ref} onClick={open} src={URL.createObjectURL(image.image)} alt={image.metaData.dateTaken}/>
+                  )}
+                </Item>
               </div>
             )}
           </div>
         ))}
+        </Gallery>
       </div>
       </div>
     );

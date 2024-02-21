@@ -19,7 +19,12 @@ public class ImageHelper
     public static (int Width, int Height) GetImageDimensions(byte[] imageData)
     {
         using (Image image = Image.Load(imageData)) {
-            return (image.Width, image.Height);
+            var orientation = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.Orientation);
+            if (orientation != null && orientation.ToString().Equals("Horizontal (normal)")) {
+                return (image.Width, image.Height);
+            } else {
+                return (image.Height, image.Width);
+            }
         }
     }
 

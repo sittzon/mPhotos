@@ -22,6 +22,8 @@ export class LibraryMeta extends Component {
             <th>Name</th>
             <th>Size (kB)</th>
             <th>Date Taken</th>
+            <th>Width</th>
+            <th>Height</th>
           </tr>
         </thead>
         <tbody>
@@ -32,6 +34,8 @@ export class LibraryMeta extends Component {
               <td>{image.name}</td>
               <td>{image.sizeKb}</td>
               <td>{image.dateTaken}</td>
+              <td>{image.width}</td>
+              <td>{image.height}</td>
             </tr>
           )}
         </tbody>
