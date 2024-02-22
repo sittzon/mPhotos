@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace mPhotos;
 
 public class PhotoMeta
@@ -8,6 +10,6 @@ public class PhotoMeta
     public int Height { get; set; }
     public DateTime? DateTaken { get; set; }
     public string? Name { get; set; }
-    // TODO: Remove location, should only be used in the controller
-    public required string Location { get; set; }
+    [JsonIgnore]
+    public string? Location { get; set; }
 }

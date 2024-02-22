@@ -1,6 +1,6 @@
 import { Counter } from "./components/Counter";
 import { LibraryMeta } from "./components/LibraryMeta";
-import { Home } from "./components/Home";
+import Home from "./components/Home";
 
 const AppRoutes = [
   {

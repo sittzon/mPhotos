@@ -50,7 +50,8 @@ export class LibraryMeta extends Component {
 
     return (
       <div>
-        <h1 id="tableLabel">Image metadata</h1>
+        <h1 id="tableLabel">Photos metadata</h1>
+        <p>{this.state.images.length} photos indexed</p>
         {contents}
       </div>
     );

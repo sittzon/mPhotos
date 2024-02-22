@@ -4,6 +4,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddResponseCompression();
+builder.Services.AddResponseCaching();
 
 var app = builder.Build();
 
@@ -18,7 +19,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseResponseCompression();
-
+app.UseResponseCaching();
 
 app.MapControllerRoute(
     name: "default",
