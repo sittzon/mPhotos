@@ -8,7 +8,7 @@ function Home() {
     // and takes the initial/default value for it/to set it to, e.g.
     const [ columns, setColumns ] = useState(5);
     const [ metaData, setMetaData ] = useState([]);
-    const [ sortOrder, setSortOrder ] = useState(false);
+    const [ sortOrder, setSortOrder ] = useState(true);
 
   // Empty dependency array -> Only run on component mount
   useEffect(() => { populateData(); }, []);

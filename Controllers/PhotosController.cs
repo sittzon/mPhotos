@@ -1,6 +1,6 @@
-using System.Data.SqlTypes;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using mPhotos.Helpers;
 
 namespace mPhotos.Controllers;
 
@@ -9,10 +9,11 @@ namespace mPhotos.Controllers;
 public class PhotosController : ControllerBase
 {
     private static readonly string photosRoot = @"";
+    private static readonly string thumbnailRoot = @"";
     private readonly ILogger<PhotosController> _logger;
     private readonly IMemoryCache _memoryCache;
     private readonly string _photosMetaCacheKey = "photosMeta";
-    private readonly string _thumbnailsCacheKey = "thumbnails";
+    // private readonly string _thumbnailsCacheKey = "thumbnails";
     private readonly int _thumbnailSizeWidth = 300;
     private readonly string _mediumCacheKey = "medium";
     private readonly int _mediumSizeWidth = 2000;
@@ -21,6 +22,11 @@ public class PhotosController : ControllerBase
     {
         _logger = logger;
         _memoryCache = memoryCache;
+
+        // Check that thumbnail folder is not inside the photos root
+        if (thumbnailRoot.Contains(photosRoot)) {
+            throw new Exception("Thumbnail folder cannot be inside the photos root folder");
+        }
 
         Task.Run(LoadPhotos);
     }
@@ -37,7 +43,7 @@ public class PhotosController : ControllerBase
                 var photoMeta = new PhotoMeta
                     {
                         DateTaken = ImageHelper.GetDateTaken(bytes),
-                        Guid = Guid.NewGuid().ToString(),
+                        Guid = HashHelper.GetHashString(fileInfo.FullName),
                         Location = fileInfo.FullName,
                         Name = fileInfo.Name,
                         Width = ImageHelper.GetImageDimensions(bytes).Width,
@@ -47,13 +53,17 @@ public class PhotosController : ControllerBase
                 photos = photos.Append(photoMeta);
                 photos = photos.OrderBy(x => x.DateTaken);
 
-                var b = System.IO.File.ReadAllBytes(photoMeta.Location);
-                var aspectRatio = ImageHelper.GetAspectRatio(b);
-                
-                int w = _thumbnailSizeWidth;
-                int h = (int)(aspectRatio/w);
-                var photoBytes = ImageHelper.GenerateThumbnailBytes(b, w, h);
-                _memoryCache.Set(_thumbnailsCacheKey + photoMeta.Guid, photoBytes);
+
+                // Only generate thumbnail if not found on disk
+                if (!System.IO.File.Exists(thumbnailRoot + "/" + photoMeta.Guid + ".jpg")) {
+                    var aspectRatio = (double)photoMeta.Width / photoMeta.Height;
+
+                    int w = _thumbnailSizeWidth;
+                    int h = (int)(aspectRatio/w);
+                    var photoBytes = ImageHelper.GenerateThumbnailBytes(bytes, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".jpg");
+                }
+
+                // _memoryCache.Set(_thumbnailsCacheKey + photoMeta.Guid, photoBytes);
 
                 // w = _mediumSizeWidth;
                 // h = (int)(aspectRatio/w);
@@ -95,7 +105,7 @@ public class PhotosController : ControllerBase
     public IEnumerable<PhotoMeta> Get()
     {
         if (_memoryCache.TryGetValue(_photosMetaCacheKey, out IEnumerable<PhotoMeta> photos)) {
-            return photos.OrderBy(x => x.DateTaken);
+            return photos.OrderBy(x => x.DateTaken).Reverse();
         }
 
         return Array.Empty<PhotoMeta>();
@@ -118,8 +128,9 @@ public class PhotosController : ControllerBase
     [ResponseCache(VaryByHeader = "User-Agent", Duration = 86400)]
     public IActionResult GetThumbnail(string guid)
     {
-        if (_memoryCache.TryGetValue(_thumbnailsCacheKey + guid, out byte[] photoBytes)) {
-            return File(photoBytes, "image/jpeg");
+        if (System.IO.File.Exists(thumbnailRoot + "/" + guid + ".jpg")) {
+            var b = System.IO.File.ReadAllBytes(thumbnailRoot + "/" + guid + ".jpg");
+            return File(b, "image/jpeg");
         }
 
         return NotFound();
