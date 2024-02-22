@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using System.Text.Json;
 using mPhotos.Helpers;
 
 namespace mPhotos.Controllers;
@@ -32,12 +33,26 @@ public class PhotosController : ControllerBase
     }
 
     public async void LoadPhotos() {
+        // Get all photos info from disk
+        var fileInfos = await GetFileInfosRecursively(photosRoot);
+        // Only support jpg/jpeg for now
+        fileInfos = fileInfos.Where(x => x.Extension.ToLower().Equals(".jpg") || x.Extension.ToLower().Equals(".jpeg"));
+        
+        // Read metadata from disk
+        // If exists -> Compare and only add missing photos. TODO: Also remove photos that are not on disk
+        // Else -> Add all photos from fileInfos
+        var photoMetadata = new List<PhotoMeta>();
+        if (System.IO.File.Exists(thumbnailRoot + "/metadata.json")) {
+            photoMetadata = JsonSerializer.Deserialize<List<PhotoMeta>>(System.IO.File.ReadAllText(thumbnailRoot + "/metadata.json"));
+
+            var fileInfoLocs = fileInfos.Select(x => x.FullName);
+            var photoLocs = photoMetadata.Select(x => x.Location);
+
+            var photosToIndex = fileInfoLocs.Except(photoLocs).ToList();
+            fileInfos = fileInfos.Where(x => photosToIndex.Contains(x.FullName)).ToList();
+        }
+
         if (!_memoryCache.TryGetValue(_photosMetaCacheKey, out IEnumerable<PhotoMeta> photos)) {
-            var fileInfos = await GetFileInfosRecursively(photosRoot);
-            
-            // Only support jpg/jpeg for now
-            fileInfos = fileInfos.Where(x => x.Extension.ToLower().Equals(".jpg") || x.Extension.ToLower().Equals(".jpeg"));
-            photos = new List<PhotoMeta>();
             foreach (var fileInfo in fileInfos) {
                 var bytes = System.IO.File.ReadAllBytes(fileInfo.FullName);
                 var photoMeta = new PhotoMeta
@@ -50,9 +65,8 @@ public class PhotosController : ControllerBase
                         Height = ImageHelper.GetImageDimensions(bytes).Height,
                         SizeKb = (int)(fileInfo.Length / 1024),
                     };
-                photos = photos.Append(photoMeta);
-                photos = photos.OrderBy(x => x.DateTaken);
-
+                photoMetadata = photoMetadata.Append(photoMeta).ToList();
+                photoMetadata = photoMetadata.OrderBy(x => x.DateTaken).ToList();
 
                 // Only generate thumbnail if not found on disk
                 if (!System.IO.File.Exists(thumbnailRoot + "/" + photoMeta.Guid + ".jpg")) {
@@ -63,15 +77,11 @@ public class PhotosController : ControllerBase
                     var photoBytes = ImageHelper.GenerateThumbnailBytes(bytes, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".jpg");
                 }
 
-                // _memoryCache.Set(_thumbnailsCacheKey + photoMeta.Guid, photoBytes);
-
-                // w = _mediumSizeWidth;
-                // h = (int)(aspectRatio/w);
-                // photoBytes = ImageHelper.GenerateThumbnailBytes(b, w, h);
-                // _memoryCache.Set(_mediumCacheKey + photoMeta.Guid, photoBytes);
-
-                _memoryCache.Set(_photosMetaCacheKey, photos);
+                // Write to metadata file and add to metadata cache
+                System.IO.File.WriteAllText(thumbnailRoot + "/metadata.json", JsonSerializer.Serialize(photoMetadata));
+                _memoryCache.Set(_photosMetaCacheKey, photoMetadata);
             }
+            _memoryCache.Set(_photosMetaCacheKey, photoMetadata);
         }
     }
 
@@ -125,7 +135,7 @@ public class PhotosController : ControllerBase
 
     [HttpGet]
     [Route("{guid}/thumb")]
-    [ResponseCache(VaryByHeader = "User-Agent", Duration = 86400)]
+    [ResponseCache(VaryByHeader = "User-Agent", Duration = 3600)]
     public IActionResult GetThumbnail(string guid)
     {
         if (System.IO.File.Exists(thumbnailRoot + "/" + guid + ".jpg")) {

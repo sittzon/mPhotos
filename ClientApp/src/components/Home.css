@@ -1,5 +1,6 @@
 ﻿.fixed {
-  position: fixed;
+  position: sticky;
+  top: 20px;
 }
 
 .btn-custom {

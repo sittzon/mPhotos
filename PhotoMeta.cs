@@ -10,6 +10,6 @@ public class PhotoMeta
     public int Height { get; set; }
     public DateTime? DateTaken { get; set; }
     public string? Name { get; set; }
-    [JsonIgnore]
-    public string? Location { get; set; }
+    // [JsonIgnore]
+    public required string Location { get; set; }
 }

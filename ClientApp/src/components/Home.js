@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Gallery, Item } from 'react-photoswipe-gallery'
+import DropdownMenu from './DropdownMenu';
 import 'photoswipe/dist/photoswipe.css'
 import './Home.css';
 
@@ -32,7 +33,7 @@ function Home() {
     setColumns(columnsNew);
   };
   
-  const sortImagesByDate = () => {
+  const sortByDate = () => {
     let sortedMetaData = [...metaData].sort((a, b) => {
       if (sortOrder) {
         return a.dateTaken > b.dateTaken
@@ -47,8 +48,7 @@ function Home() {
   return (
       <div>
         <div className="fixed">
-          <button className="btn btn-custom" onClick={sortImagesByDate}>Sort</button>
-          <button className="btn btn-custom" onClick={toggleColumns}>Zoom</button>
+          <DropdownMenu toggleColumns={toggleColumns} sortByDate={sortByDate}/>
         </div>
         <p className="align-right">{metaData.length} photos</p>
         <div>
