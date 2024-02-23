@@ -1,32 +1,7 @@
-﻿.fixed {
-  position: sticky;
-  top: 20px;
-}
-
-.btn-custom {
-  background-color: white;
-  color: black;
-  border: 1px black solid;
-}
-.btn-custom:hover {
-  background-color: white;
-  border: 1px black solid;
-}
-
-.align-right {
-  text-align: right;
-}
-
-.txt-sm {
-  font-size: small;
-}
-
-.txt-ww {
-  word-wrap: break-word;
-}
-
-.container {
+﻿.container {
   max-width: 2145px;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .col > img {

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Gallery, Item } from 'react-photoswipe-gallery'
-import DropdownMenu from './DropdownMenu';
+import TopItems from './TopItems';
 import 'photoswipe/dist/photoswipe.css'
 import './Home.css';
 
-function Home() {
+const Home = () => {
     // The 'useState' hook (function) returns a getter (variable) & setter (function) for your state value
     // and takes the initial/default value for it/to set it to, e.g.
     const [ columns, setColumns ] = useState(5);
@@ -47,10 +47,7 @@ function Home() {
 
   return (
       <div>
-        <div className="fixed">
-          <DropdownMenu toggleColumns={toggleColumns} sortByDate={sortByDate}/>
-        </div>
-        <p className="align-right">{metaData.length} photos</p>
+        <TopItems toggleColumns={toggleColumns} sortByDate={sortByDate} noPhotos={metaData.length}/>
         <div>
           <Gallery withCaption id="my-gallery">
           {groupByN(columns, metaData).map((group, index) => (
