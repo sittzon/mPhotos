@@ -12,7 +12,7 @@ const TopItems = (props) => {
     <div className="fixed">
       
       <div className="info-and-menu">
-        <p className="no-photos">{props.noPhotos} photos</p>
+        <p className="text-rounded-corners">{props.noPhotos} photos</p>
         <button className="menu-button" onClick={toggleMenu}>
           <img src="./dots-three-circle.svg" alt="Menu"/>
         </button>
