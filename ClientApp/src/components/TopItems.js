@@ -30,7 +30,7 @@ const TopItems = (props) => {
               <li>
                   <button onClick={() => {
                     props.sortByDate(); 
-                    setIsOpen(false)}}>Sort by date</button>
+                    setIsOpen(false)}}>Reverse sort</button>
               </li>
             </ul>
           </div>

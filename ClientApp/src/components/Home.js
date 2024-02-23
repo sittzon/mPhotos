@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Gallery, Item } from 'react-photoswipe-gallery'
+// import useScreenSize from '../useScreenSize';
 import TopItems from './TopItems';
 import 'photoswipe/dist/photoswipe.css'
 import './Home.css';
