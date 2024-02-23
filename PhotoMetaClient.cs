@@ -1,8 +1,6 @@
-using System.Text.Json.Serialization;
-
 namespace mPhotos;
 
-public class PhotoMeta
+public class PhotoMetaClient
 {
     public required string Guid { get; set; }
     public int SizeKb { get; set; }
@@ -10,5 +8,4 @@ public class PhotoMeta
     public int Height { get; set; }
     public DateTime? DateTaken { get; set; }
     public string? Name { get; set; }
-    public required string Location { get; set; }
 }

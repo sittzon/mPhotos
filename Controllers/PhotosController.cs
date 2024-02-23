@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
 using mPhotos.Helpers;
@@ -112,13 +112,21 @@ public class PhotosController : ControllerBase
 
     [HttpGet]
     [Route("metadata")]
-    public IEnumerable<PhotoMeta> Get()
+    public IEnumerable<PhotoMetaClient> Get()
     {
         if (_memoryCache.TryGetValue(_photosMetaCacheKey, out IEnumerable<PhotoMeta> photos)) {
-            return photos.OrderBy(x => x.DateTaken).Reverse();
+            return photos.Select(x => new PhotoMetaClient() {
+                DateTaken = x.DateTaken,
+                Guid = x.Guid,
+                Name = x.Name,
+                SizeKb = x.SizeKb,
+                Width = x.Width,
+                Height = x.Height,
+            })
+            .OrderBy(x => x.DateTaken).Reverse();
         }
 
-        return Array.Empty<PhotoMeta>();
+        return Array.Empty<PhotoMetaClient>();
     }
 
     [HttpGet]
