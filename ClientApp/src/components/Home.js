@@ -55,6 +55,11 @@ const Home = () => {
   const populateData = async () => {
     const response = await fetch('photos/metadata');
     const metaData = await response.json();
+    
+    let currentDate = metaData[0].dateTaken;
+    currentDate = currentDate.split('T').shift();
+    setmetaCurrentDate(currentDate);
+    
     setMetaData(metaData);
   };
 
