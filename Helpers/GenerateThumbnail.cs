@@ -7,31 +7,38 @@ namespace mPhotos.Helpers
 {
     public class ImageHelper
     {
-        public static byte[] GenerateThumbnailBytes(byte[] imageData, int thumbnailWidth, int thumbnailHeight, string? filePath = null)
-        {
-            using (Image image = Image.Load(imageData)) {
-                image.Mutate(x => x.Resize(thumbnailWidth, thumbnailHeight));
-                
-                if (filePath != null) {
-                    image.SaveAsJpeg(filePath);
-                    return Array.Empty<byte>();
-                } else {
-                    using (MemoryStream ms = new MemoryStream()) {
-                        image.SaveAsJpeg(ms);
-                        return ms.ToArray();
-                    }
+        public static byte[] GenerateThumbnailBytes(Image image, int thumbnailWidth, int thumbnailHeight, string? filePath = null) {
+            image.Mutate(x => x.Resize(thumbnailWidth, thumbnailHeight));
+            
+            if (filePath != null) {
+                image.SaveAsJpeg(filePath);
+                return Array.Empty<byte>();
+            } else {
+                using (MemoryStream ms = new MemoryStream()) {
+                    image.SaveAsJpeg(ms);
+                    return ms.ToArray();
                 }
             }
         }
+        public static byte[] GenerateThumbnailBytes(byte[] imageData, int thumbnailWidth, int thumbnailHeight, string? filePath = null)
+        {
+            using (Image image = Image.Load(imageData)) {
+                return GenerateThumbnailBytes(image, thumbnailWidth, thumbnailHeight, filePath);
+            }
+        }
+        public static (int Width, int Height) GetImageDimensions(Image image) {
+            var orientation = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.Orientation);
+            if (orientation != null && orientation.ToString().Contains("Rotate 90")) {
+                return (image.Height, image.Width);
+            } else {
+                return (image.Width, image.Height);
+            }
+        }
+
         public static (int Width, int Height) GetImageDimensions(byte[] imageData)
         {
             using (Image image = Image.Load(imageData)) {
-                var orientation = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.Orientation);
-                if (orientation != null && orientation.ToString().Equals("Horizontal (normal)")) {
-                    return (image.Width, image.Height);
-                } else {
-                    return (image.Height, image.Width);
-                }
+                return GetImageDimensions(image);
             }
         }
 
@@ -41,17 +48,36 @@ namespace mPhotos.Helpers
             return (double)width / height;
         }
 
+        public static DateTime? GetDateTaken(Image image) {
+            DateTime? dateTaken = null;
+            var metaDate = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.DateTimeOriginal);
+            if (metaDate != null && 
+                DateTime.TryParseExact(metaDate.ToString(), "yyyy:MM:dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dateTakenValue)) {
+                dateTaken = dateTakenValue;
+            }
+            return dateTaken;
+        }
         public static DateTime? GetDateTaken(byte[] imageData)
         {
             DateTime? dateTaken = null;
             using (Image image = Image.Load(imageData)) {
-                var metaDate = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.DateTimeOriginal);
-                if (metaDate != null && 
-                    DateTime.TryParseExact(metaDate.ToString(), "yyyy:MM:dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dateTakenValue)) {
-                    dateTaken = dateTakenValue;
-                }
+                dateTaken = GetDateTaken(image);
             }
             return dateTaken;
         }
     }
+
+     public enum ExifOrientations
+    {
+        Unknown = 0,
+        TopLeft = 1,
+        TopRight = 2,
+        BottomRight = 3,
+        BottomLeft = 4,
+        LeftTop = 5,
+        RightTop = 6,
+        RightBottom = 7,
+        LeftBottom = 8,
+    }
+
 }

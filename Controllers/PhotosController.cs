@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using SixLabors.ImageSharp;
 using System.Text.Json;
 using mPhotos.Helpers;
 
@@ -55,14 +56,15 @@ public class PhotosController : ControllerBase
             var i = 0;
             foreach (var fileInfo in originalPhotos) {
                 var bytes = System.IO.File.ReadAllBytes(fileInfo.FullName);
+                var image = Image.Load(bytes);
                 var photoMeta = new PhotoMeta
                     {
-                        DateTaken = ImageHelper.GetDateTaken(bytes),
+                        DateTaken = ImageHelper.GetDateTaken(image),
                         Guid = HashHelper.GetHashString(fileInfo.FullName),
                         Location = fileInfo.FullName,
                         Name = fileInfo.Name,
-                        Width = ImageHelper.GetImageDimensions(bytes).Width,
-                        Height = ImageHelper.GetImageDimensions(bytes).Height,
+                        Width = ImageHelper.GetImageDimensions(image).Width,
+                        Height = ImageHelper.GetImageDimensions(image).Height,
                         SizeKb = (int)(fileInfo.Length / 1024),
                     };
                 photoMetadata = photoMetadata.Append(photoMeta).ToList();
@@ -74,7 +76,7 @@ public class PhotosController : ControllerBase
 
                     int w = _thumbnailSizeWidth;
                     int h = (int)(aspectRatio/w);
-                    var photoBytes = ImageHelper.GenerateThumbnailBytes(bytes, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".jpg");
+                    var photoBytes = ImageHelper.GenerateThumbnailBytes(image, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".jpg");
                 }
 
                 // Write to metadata file and add to metadata cache
