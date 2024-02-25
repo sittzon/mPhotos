@@ -12,6 +12,11 @@ const Home = () => {
   const [ metaData, setMetaData ] = useState([]);
   const [ sortOrder, setSortOrder ] = useState(true);
   const [ metaCurrentDate, setmetaCurrentDate ] = useState('0');
+  const [ metaCurrentYear, setmetaCurrentYear ] = useState('0');
+  const [ metaCurrentMonth, setmetaCurrentMonth ] = useState('0');
+
+  const months = [ "January", "February", "March", "April", "May", "June", 
+           "July", "August", "September", "October", "November", "December" ];
 
   // Empty dependency array -> Only run on component mount
   useEffect(() => { 
@@ -38,6 +43,8 @@ const Home = () => {
     let currentDate = metaDataRef.current[index].dateTaken;
     currentDate = currentDate.split('T').shift();
     setmetaCurrentDate(currentDate);
+    setmetaCurrentYear(currentDate.split('-')[0]);
+    setmetaCurrentMonth(currentDate.split('-')[1]);
   };
 
   const percentScroll = () => {
@@ -59,6 +66,8 @@ const Home = () => {
     let currentDate = metaData[0].dateTaken;
     currentDate = currentDate.split('T').shift();
     setmetaCurrentDate(currentDate);
+    setmetaCurrentYear(currentDate.split('-')[0]);
+    setmetaCurrentMonth(currentDate.split('-')[1]);
     
     setMetaData(metaData);
   };
@@ -84,28 +93,29 @@ const Home = () => {
 
   return (
       <div>
-        <h2 className="text-rounded-corners" style={{position: 'fixed', top:'55px', marginLeft: "10px"}}>{metaCurrentDate}</h2>
-        <TopItems toggleColumns={toggleColumns} sortByDate={sortByDate} noPhotos={metaData.length}/>
+        <h2 className="text-rounded-corners" style={{position: 'fixed', top:'55px', marginLeft: "10px"}}>
+          {months[+metaCurrentMonth - 1]} {metaCurrentYear} 
+        </h2>
         <div>
           <Gallery withCaption id="my-gallery">
           {groupByN(columns, metaData).map((group, index) => (
             <div key={index} className="row align-items-center g-1 mb-1">
-              {group.map(metaData =>
-                <div className="col" key={metaData.guid}>
+              {group.map(currentMetaData =>
+                <div className="col" key={currentMetaData.guid}>
                   <Item
-                    id={metaData.guid}
-                    original={"photos/" + metaData.guid}
-                    thumbnail={"photos/" + metaData.guid + "/thumb"}
-                    width={metaData.width}
-                    height={metaData.height}
+                    id={currentMetaData.guid}
+                    original={"photos/" + currentMetaData.guid}
+                    thumbnail={"photos/" + currentMetaData.guid + "/thumb"}
+                    width={currentMetaData.width}
+                    height={currentMetaData.height}
                     caption={
-                      metaData.dateTaken + " - " + 
-                      metaData.name + " - " + 
-                      metaData.width + "x" + metaData.height + " - " + 
-                      metaData.sizeKb + "kB"}
+                      currentMetaData.dateTaken + " - " + 
+                      currentMetaData.name + " - " + 
+                      currentMetaData.width + "x" + currentMetaData.height + " - " + 
+                      currentMetaData.sizeKb + "kB"}
                     >
                     {({ ref, open }) => (
-                      <img ref={ref} onClick={open} src={"photos/" + metaData.guid + "/thumb"} alt={metaData.dateTaken}/>
+                      <img ref={ref} onClick={open} src={"photos/" + currentMetaData.guid + "/thumb"} alt={currentMetaData.dateTaken}/>
                     )}
                   </Item>
                 </div>
