@@ -91,11 +91,48 @@ const Home = () => {
     setSortOrder(!sortOrder);
   };
 
+  const filterByDates = () => {
+    const filterStartDate = document.querySelector('#filterStartDate');
+    const filterEndDate = document.querySelector('#filterEndDate');
+
+    // Get metadata index of filterStartDate & filterEndDate
+    const startIndex = metaData.findIndex((photo) => {
+      return photo.dateTaken.split('T').shift() > filterStartDate.value;
+    });
+    const endIndex = metaData.findIndex((photo) => {
+      return photo.dateTaken.split('T').shift() >= filterEndDate.value;
+    });
+    // console.log(filterStartDate.value);
+    // console.log(filterEndDate.value);
+    console.log(startIndex);
+    console.log(endIndex);
+
+    TopItems.startDate = filterStartDate.value;
+    
+    setMetaData(metaData.slice(startIndex, endIndex));
+    // To index in array
+    const index = 0;
+    let currentDate = metaDataRef.current[index].dateTaken;
+    currentDate = currentDate.split('T').shift();
+    setmetaCurrentDate(currentDate);
+    setmetaCurrentYear(currentDate.split('-')[0]);
+    setmetaCurrentMonth(currentDate.split('-')[1]);
+  }
+
   return (
       <div>
         <h2 className="text-rounded-corners" style={{position: 'fixed', top:'55px', marginLeft: "10px"}}>
           {months[+metaCurrentMonth - 1]} {metaCurrentYear} 
         </h2>
+        <TopItems 
+          toggleColumns={toggleColumns} 
+          sortByDate={sortByDate} 
+          filterByDates={filterByDates} 
+          noPhotos={metaData.length} 
+          // startDate='2000-01-01'
+          startDate={metaCurrentDate}
+          // startDate={metaData[0].dateTaken.toString().split('T').shift()} 
+          />
         <div>
           <Gallery withCaption id="my-gallery">
           {groupByN(columns, metaData).map((group, index) => (
