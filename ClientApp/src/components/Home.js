@@ -3,6 +3,7 @@ import { Gallery, Item } from 'react-photoswipe-gallery'
 // import useScreenSize from '../useScreenSize';
 import TopItems from './TopItems';
 import 'photoswipe/dist/photoswipe.css'
+import Cookies from 'universal-cookie';
 import './Home.css';
 
 const Home = () => {
@@ -18,9 +19,16 @@ const Home = () => {
   const months = [ "January", "February", "March", "April", "May", "June", 
            "July", "August", "September", "October", "November", "December" ];
 
+  const cookies = new Cookies();
+
   // Empty dependency array -> Only run on component mount
   useEffect(() => { 
     populateData();
+
+    const cookieColumns = cookies.get('columns');
+    if (cookieColumns) {
+      setColumns(cookieColumns);
+    }
 
     window.addEventListener('scroll', handleScroll);
     
@@ -77,6 +85,7 @@ const Home = () => {
     columns === 3? 5 : 
       (columns === 5? 7 : 3);
     setColumns(columnsNew);
+    cookies.set('columns', columnsNew, { path: '/' });
   };
   
   const sortByDate = () => {
