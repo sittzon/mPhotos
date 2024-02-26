@@ -14,7 +14,6 @@ public class PhotosController : ControllerBase
     private static readonly string errorLogFilename = thumbnailRoot + "/errors.log";
     private readonly IMemoryCache _memoryCache;
     private readonly string _photosMetaCacheKey = "photosMeta";
-    private readonly string _thumbnailsCacheKey = "thumbnails";
     private readonly int _thumbnailSizeWidth = 300;
 
     public PhotosController(IMemoryCache memoryCache)
@@ -160,19 +159,13 @@ public class PhotosController : ControllerBase
     [Route("{guid}/thumb")]
     [ResponseCache(VaryByHeader = "User-Agent", Duration = 86400)]
     public IActionResult GetThumbnail(string guid)
-    {
-        // Try cache first
-        if (_memoryCache.TryGetValue(_thumbnailsCacheKey + guid, out byte[]? b)) {
-            return File(b, "image/jpeg");
-        }
-        
+    {        
         var fileName = thumbnailRoot + "/" + guid + ".jpg";
         if (!System.IO.File.Exists(fileName)) {
            return NotFound();
         }
 
-        b = System.IO.File.ReadAllBytes(fileName);
-        _memoryCache.Set(_thumbnailsCacheKey + guid, b);
+        var b = System.IO.File.ReadAllBytes(fileName);
         return File(b, "image/jpeg");
     }
 }
