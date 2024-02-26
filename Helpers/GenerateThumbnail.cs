@@ -28,7 +28,9 @@ namespace mPhotos.Helpers
         }
         public static (int Width, int Height) GetImageDimensions(Image image) {
             var orientation = image.Metadata.ExifProfile?.Values.FirstOrDefault(x => x.Tag == ExifTag.Orientation);
-            if (orientation != null && orientation.ToString().Contains("Rotate 90")) {
+            if (orientation != null && 
+                (orientation.ToString().ToLower().Contains("rotate 90") || 
+                    orientation.ToString().ToLower().Contains("rotate 270"))) {
                 return (image.Height, image.Width);
             } else {
                 return (image.Width, image.Height);

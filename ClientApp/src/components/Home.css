@@ -15,6 +15,10 @@
   padding-right: 5px;
 }
 
+.white-bkg {
+  background-color: #FFF;
+}
+
 .col > img {
   width: 100%;
   max-height: 100%;

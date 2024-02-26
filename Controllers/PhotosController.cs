@@ -57,14 +57,15 @@ public class PhotosController : ControllerBase
                 try {
                     var bytes = System.IO.File.ReadAllBytes(fileInfo.FullName);
                     var image = Image.Load(bytes);
+                    var (width, height) = ImageHelper.GetImageDimensions(image);
                     var photoMeta = new PhotoMeta
                         {
                             DateTaken = ImageHelper.GetDateTaken(image),
                             Guid = HashHelper.GetHashString(fileInfo.FullName),
                             Location = fileInfo.FullName,
                             Name = fileInfo.Name,
-                            Width = ImageHelper.GetImageDimensions(image).Width,
-                            Height = ImageHelper.GetImageDimensions(image).Height,
+                            Width = width,
+                            Height = height,
                             SizeKb = (int)(fileInfo.Length / 1024),
                         };
                     photoMetadata = photoMetadata.Append(photoMeta).ToList();

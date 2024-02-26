@@ -18,7 +18,6 @@ export class LibraryMeta extends Component {
         <thead>
           <tr key="header">
             <th>Guid</th>
-            {/* <th>Location</th> */}
             <th>Name</th>
             <th>Size (kB)</th>
             <th>Date Taken</th>
@@ -30,7 +29,6 @@ export class LibraryMeta extends Component {
           {images.map(image =>
             <tr key={image.guid}>
               <td>{image.guid}</td>
-              {/* <td>{image.location}</td> */}
               <td>{image.name}</td>
               <td>{image.sizeKb}</td>
               <td>{image.dateTaken}</td>
@@ -49,7 +47,7 @@ export class LibraryMeta extends Component {
       : LibraryMeta.renderTable(this.state.images);
 
     return (
-      <div>
+      <div className="white-bkg">
         <h1 id="tableLabel">Photos metadata</h1>
         <p>{this.state.images.length} photos indexed</p>
         {contents}
