@@ -7,6 +7,18 @@ const TopItems = (props) => {
   
   const [startDate, setStartDate] = useState((new Date()).toISOString().split('T').shift());
   const [endDate, setEndDate] = useState((new Date()).toISOString().split('T').shift());
+
+  useEffect(() => { 
+    window.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  const handleScroll = async (event) => {
+    setIsOpen(false);
+  };
   
   const toggleMenu = () => {
     setIsOpen(!isOpen);

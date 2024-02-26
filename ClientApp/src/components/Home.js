@@ -138,7 +138,7 @@ const Home = () => {
           {groupByN(columns, metaData).map((group, index) => (
             <div key={index} className="row align-items-center g-1 mb-1">
               {group.map(currentMetaData =>
-                <div className="col" key={currentMetaData.guid}>
+                <div className="col" style={{display: 'flex', justifyContent:'center'}}key={currentMetaData.guid}>
                   <Item
                     id={currentMetaData.guid}
                     original={"photos/" + currentMetaData.guid}

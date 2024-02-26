@@ -1,10 +1,21 @@
-﻿.container {
+﻿@media (prefers-color-scheme: light) {
+  body {
+    background: #FFF;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #000;
+  }
+}
+
+.container {
   max-width: 2145px;
   padding-left: 5px;
   padding-right: 5px;
 }
 
 .col > img {
-  max-width: 100%;
+  width: 100%;
   max-height: 100%;
 }
