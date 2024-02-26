@@ -11,15 +11,14 @@ namespace mPhotos.Controllers;
 public class PhotosController : ControllerBase
 {
     private static readonly string metaDataFilename = thumbnailRoot + "/metadata.json";
-    private readonly ILogger<PhotosController> _logger;
+    private static readonly string errorLogFilename = thumbnailRoot + "/errors.log";
     private readonly IMemoryCache _memoryCache;
     private readonly string _photosMetaCacheKey = "photosMeta";
     private readonly string _thumbnailsCacheKey = "thumbnails";
     private readonly int _thumbnailSizeWidth = 300;
 
-    public PhotosController(ILogger<PhotosController> logger, IMemoryCache memoryCache)
+    public PhotosController(IMemoryCache memoryCache)
     {
-        _logger = logger;
         _memoryCache = memoryCache;
 
         // Check that thumbnail folder is not inside the photos root
@@ -55,38 +54,42 @@ public class PhotosController : ControllerBase
 
             var i = 0;
             foreach (var fileInfo in originalPhotos) {
-                var bytes = System.IO.File.ReadAllBytes(fileInfo.FullName);
-                var image = Image.Load(bytes);
-                var photoMeta = new PhotoMeta
-                    {
-                        DateTaken = ImageHelper.GetDateTaken(image),
-                        Guid = HashHelper.GetHashString(fileInfo.FullName),
-                        Location = fileInfo.FullName,
-                        Name = fileInfo.Name,
-                        Width = ImageHelper.GetImageDimensions(image).Width,
-                        Height = ImageHelper.GetImageDimensions(image).Height,
-                        SizeKb = (int)(fileInfo.Length / 1024),
-                    };
-                photoMetadata = photoMetadata.Append(photoMeta).ToList();
-                photoMetadata = photoMetadata.OrderBy(x => x.DateTaken).ToList();
+                try {
+                    var bytes = System.IO.File.ReadAllBytes(fileInfo.FullName);
+                    var image = Image.Load(bytes);
+                    var photoMeta = new PhotoMeta
+                        {
+                            DateTaken = ImageHelper.GetDateTaken(image),
+                            Guid = HashHelper.GetHashString(fileInfo.FullName),
+                            Location = fileInfo.FullName,
+                            Name = fileInfo.Name,
+                            Width = ImageHelper.GetImageDimensions(image).Width,
+                            Height = ImageHelper.GetImageDimensions(image).Height,
+                            SizeKb = (int)(fileInfo.Length / 1024),
+                        };
+                    photoMetadata = photoMetadata.Append(photoMeta).ToList();
+                    photoMetadata = photoMetadata.OrderBy(x => x.DateTaken).ToList();
 
-                // Only generate thumbnail if not found on disk
-                if (!System.IO.File.Exists(thumbnailRoot + "/" + photoMeta.Guid + ".jpg")) {
-                    var aspectRatio = (double)photoMeta.Width / photoMeta.Height;
+                    // Only generate thumbnail if not found on disk
+                    if (!System.IO.File.Exists(thumbnailRoot + "/" + photoMeta.Guid + ".jpg")) {
+                        var aspectRatio = (double)photoMeta.Width / photoMeta.Height;
 
-                    int w = _thumbnailSizeWidth;
-                    int h = (int)(aspectRatio/w);
-                    var photoBytes = ImageHelper.GenerateThumbnailBytes(image, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".jpg");
-                }
+                        int w = _thumbnailSizeWidth;
+                        int h = (int)(aspectRatio/w);
+                        var photoBytes = ImageHelper.GenerateThumbnailBytes(image, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".jpg");
+                    }
 
-                // Write to metadata file and add to metadata cache
-                // Update cache every photo
-                _memoryCache.Set(_photosMetaCacheKey, photoMetadata);
-                // Only write to disk every 50th photo
-                i = (i + 1) % 50;
-                if (i.Equals(0)) {
-                    System.IO.File.WriteAllText(metaDataFilename, JsonSerializer.Serialize(photoMetadata));
-                }
+                    // Write to metadata file and add to metadata cache
+                    // Update cache every photo
+                    _memoryCache.Set(_photosMetaCacheKey, photoMetadata);
+                    // Only write to disk every 50th photo
+                    i = (i + 1) % 50;
+                    if (i.Equals(0)) {
+                        System.IO.File.WriteAllText(metaDataFilename, JsonSerializer.Serialize(photoMetadata));
+                    }
+                } catch(Exception e) {
+                    System.IO.File.AppendAllText(errorLogFilename, @$"Error loading photo: {fileInfo.FullName}. Exception:  {e} \n");
+                } 
             }
             _memoryCache.Set(_photosMetaCacheKey, photoMetadata);
             System.IO.File.WriteAllText(metaDataFilename, JsonSerializer.Serialize(photoMetadata));
