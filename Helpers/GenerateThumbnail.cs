@@ -11,11 +11,11 @@ namespace mPhotos.Helpers
             image.Mutate(x => x.Resize(thumbnailWidth, thumbnailHeight));
             
             if (filePath != null) {
-                image.SaveAsJpeg(filePath);
+                image.SaveAsWebp(filePath);
                 return Array.Empty<byte>();
             } else {
                 using (MemoryStream ms = new MemoryStream()) {
-                    image.SaveAsJpeg(ms);
+                    image.SaveAsWebp(ms);
                     return ms.ToArray();
                 }
             }
@@ -81,5 +81,4 @@ namespace mPhotos.Helpers
         RightBottom = 7,
         LeftBottom = 8,
     }
-
 }

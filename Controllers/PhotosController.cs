@@ -71,12 +71,12 @@ public class PhotosController : ControllerBase
                     photoMetadata = photoMetadata.OrderBy(x => x.DateTaken).ToList();
 
                     // Only generate thumbnail if not found on disk
-                    if (!System.IO.File.Exists(thumbnailRoot + "/" + photoMeta.Guid + ".jpg")) {
+                    if (!System.IO.File.Exists(thumbnailRoot + "/" + photoMeta.Guid + ".webp")) {
                         var aspectRatio = (double)photoMeta.Width / photoMeta.Height;
 
                         int w = _thumbnailSizeWidth;
                         int h = (int)(aspectRatio/w);
-                        var photoBytes = ImageHelper.GenerateThumbnailBytes(image, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".jpg");
+                        var photoBytes = ImageHelper.GenerateThumbnailBytes(image, w, h, thumbnailRoot + "/" + photoMeta.Guid + ".webp");
                     }
 
                     // Write to metadata file and add to metadata cache
@@ -87,7 +87,10 @@ public class PhotosController : ControllerBase
                     if (i.Equals(0)) {
                         System.IO.File.WriteAllText(metaDataFilename, JsonSerializer.Serialize(photoMetadata));
                     }
-                } catch(Exception e) {
+                } catch (DirectoryNotFoundException e) {
+                    throw new Exception("Directory not found: " + e);
+                }
+                 catch(Exception e) {
                     System.IO.File.AppendAllText(errorLogFilename, @$"Error loading photo: {fileInfo.FullName}. Exception:  {e} \n");
                 } 
             }
@@ -157,15 +160,15 @@ public class PhotosController : ControllerBase
 
     [HttpGet]
     [Route("{guid}/thumb")]
-    [ResponseCache(VaryByHeader = "User-Agent", Duration = 86400)]
+    [ResponseCache(VaryByHeader = "User-Agent", Duration = 3600)]
     public IActionResult GetThumbnail(string guid)
     {        
-        var fileName = thumbnailRoot + "/" + guid + ".jpg";
+        var fileName = thumbnailRoot + "/" + guid + ".webp";
         if (!System.IO.File.Exists(fileName)) {
            return NotFound();
         }
 
         var b = System.IO.File.ReadAllBytes(fileName);
-        return File(b, "image/jpeg");
+        return File(b, "image/webp");
     }
 }
