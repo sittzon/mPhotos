@@ -1,15 +1,10 @@
-import { Counter } from "./components/Counter";
-import { LibraryMeta } from "./components/LibraryMeta";
+import LibraryMeta from "./components/LibraryMeta";
 import Home from "./components/Home";
 
 const AppRoutes = [
   {
     index: true,
     element: <Home />
-  },
-  {
-    path: '/counter',
-    element: <Counter />
   },
   {
     path: '/photo-meta',
