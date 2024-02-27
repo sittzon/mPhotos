@@ -2,6 +2,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Metadata.Profiles.Exif;
 using System.Globalization;
+using SixLabors.ImageSharp.Formats.Webp;
 
 namespace mPhotos.Helpers
 {
@@ -9,13 +10,18 @@ namespace mPhotos.Helpers
     {
         public static byte[] GenerateThumbnailBytes(Image image, int thumbnailWidth, int thumbnailHeight, string? filePath = null) {
             image.Mutate(x => x.Resize(thumbnailWidth, thumbnailHeight));
+            var encoder = new WebpEncoder()
+            {
+                Quality = 50,
+                Method = WebpEncodingMethod.Level3
+            };
             
             if (filePath != null) {
-                image.SaveAsWebp(filePath);
+                image.SaveAsWebp(filePath, encoder);
                 return Array.Empty<byte>();
             } else {
                 using (MemoryStream ms = new MemoryStream()) {
-                    image.SaveAsWebp(ms);
+                    image.SaveAsWebp(ms, encoder);
                     return ms.ToArray();
                 }
             }
