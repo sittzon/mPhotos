@@ -1,19 +1,22 @@
-import React, { Component } from 'react';
+import React, { useEffect, useState } from 'react';
 
-export class LibraryMeta extends Component {
-  static displayName = LibraryMeta.name;
+const LibraryMeta = () => {
+  const [ metaData, setMetadata ] = useState([]);
 
-  constructor(props) {
-    super(props);
-    this.state = { images: [], loading: true };
+  useEffect(() => {
+    populateData();
+  }, []);
+  
+  const populateData = async ()=> {
+    const response = await fetch('photos/metadata');
+    const data = await response.json();
+    setMetadata(data);
   }
 
-  componentDidMount() {
-    this.populateData();
-  }
-
-  static renderTable(images) {
-    return (
+  return (
+    <div className="white-bkg">
+      <h1 id="tableLabel">Photos metadata</h1>
+      <p>{metaData.length} photos indexed</p>
       <table className="table table-striped" aria-labelledby="tableLabel">
         <thead>
           <tr key="header">
@@ -26,38 +29,20 @@ export class LibraryMeta extends Component {
           </tr>
         </thead>
         <tbody>
-          {images.map(image =>
-            <tr key={image.guid}>
-              <td>{image.guid}</td>
-              <td>{image.name}</td>
-              <td>{image.sizeKb}</td>
-              <td>{image.dateTaken}</td>
-              <td>{image.width}</td>
-              <td>{image.height}</td>
+          {metaData.map(currentMetadata =>
+            <tr key={currentMetadata.guid}>
+              <td>{currentMetadata.guid}</td>
+              <td>{currentMetadata.name}</td>
+              <td>{currentMetadata.sizeKb}</td>
+              <td>{currentMetadata.dateTaken}</td>
+              <td>{currentMetadata.width}</td>
+              <td>{currentMetadata.height}</td>
             </tr>
           )}
         </tbody>
       </table>
-    );
-  }
-
-  render() {
-    let contents = this.state.loading
-      ? <p><em>Loading...</em></p>
-      : LibraryMeta.renderTable(this.state.images);
-
-    return (
-      <div className="white-bkg">
-        <h1 id="tableLabel">Photos metadata</h1>
-        <p>{this.state.images.length} photos indexed</p>
-        {contents}
-      </div>
-    );
-  }
-
-  async populateData() {
-    const response = await fetch('photos/metadata');
-    const data = await response.json();
-    this.setState({ images: data, loading: false });
-  }
+    </div>
+  );
 }
+
+export default LibraryMeta;
