@@ -42,23 +42,23 @@ const LibraryMeta = () => {
     <div className="white-bkg" 
       style={{ display: 'flex', 
         flexDirection: 'column', 
-        height: '94dvh'}}
+        height: '87vh'}}
       >
       <div>
         <h1>Photos metadata</h1>
         <p>{metaData.length} photos indexed</p>
         <div>
-          <thead style={{ display: 'flex', 
+          <div style={{ display: 'flex', 
             justifyContent: 'space-between', 
             padding: '0 16px'}}
           >
-            <th>Guid</th>
-            <th>Name</th>
-            <th>Size (kB)</th>
-            <th>Date Taken</th>
-            <th>Width</th>
-            <th>Height</th>
-          </thead>
+            <h5>Guid</h5>
+            <h5>Name</h5>
+            <h5>Size (kB)</h5>
+            <h5>Date Taken</h5>
+            <h5>Width</h5>
+            <h5>Height</h5>
+          </div>
         </div>
       </div>
 
