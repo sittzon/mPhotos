@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Gallery, Item } from 'react-photoswipe-gallery'
-// import useScreenSize from '../useScreenSize';
 import TopItems from './TopItems';
 import 'photoswipe/dist/photoswipe.css'
 import Cookies from 'universal-cookie';
@@ -10,16 +9,20 @@ const Home = () => {
   // The 'useState' hook (function) returns a getter (variable) & setter (function) for your state value
   // and takes the initial/default value for it/to set it to, e.g.
   const [ columns, setColumns ] = useState(5);
+  const [ pages, setPages ] = useState([]);
+  const [ pageIndex, setPageIndex ] = useState(0);
   const [ metaData, setMetaData ] = useState([]);
   const [ sortOrder, setSortOrder ] = useState(true);
   const [ metaCurrentDate, setmetaCurrentDate ] = useState('0');
   const [ metaCurrentYear, setmetaCurrentYear ] = useState('0');
   const [ metaCurrentMonth, setmetaCurrentMonth ] = useState('0');
-
-  const months = [ "January", "February", "March", "April", "May", "June", 
-           "July", "August", "September", "October", "November", "December" ];
-
+  
   const cookies = new Cookies();
+  const pagesRef = useRef(pages);
+  const pageIndexRef = useRef(pageIndex);
+  const itemsPerPage = 10500;
+  const months = [ "January", "February", "March", "April", "May", "June", 
+  "July", "August", "September", "October", "November", "December" ];
 
   // Empty dependency array -> Only run on component mount
   useEffect(() => { 
@@ -38,24 +41,32 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    metaDataRef.current = metaData;
-  }, [metaData]);
+    pagesRef.current = pages;
+  }, [pages]);
 
-  const metaDataRef = useRef(metaData);
+  useEffect(() => {
+    pageIndexRef.current = pageIndex;
+    handleScroll();
+  }, [pageIndex]);
 
-  const handleScroll = async (event) => {
-    const scroll = percentScroll();
-
-    // To index in array
-    const index = Math.max(0, Math.floor(scroll * metaDataRef.current.length));
-    let currentDate = metaDataRef.current[index].dateTaken;
+  const handleScroll = () => {
+    if (pagesRef.current.length === 0) {
+      return;
+    }
+    // Get scroll percent of page
+    const percentScroll = scrollPercent();
+    // Convert to index in array
+    const index = Math.max(0, Math.floor(percentScroll * pagesRef.current[pageIndexRef.current].length));
+    // Get dateTaken of index image
+    let currentDate = pagesRef.current[pageIndexRef.current][index].dateTaken;
+    console.log(percentScroll + " -> " + index + " -> " + currentDate);
     currentDate = currentDate.split('T').shift();
     setmetaCurrentDate(currentDate);
     setmetaCurrentYear(currentDate.split('-')[0]);
     setmetaCurrentMonth(currentDate.split('-')[1]);
   };
 
-  const percentScroll = () => {
+  const scrollPercent = () => {
     var body = document.body, html = document.documentElement;
     var height = Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
     return window.scrollY / height;
@@ -76,7 +87,8 @@ const Home = () => {
     setmetaCurrentDate(currentDate);
     setmetaCurrentYear(currentDate.split('-')[0]);
     setmetaCurrentMonth(currentDate.split('-')[1]);
-    
+
+    setPages(groupByN(itemsPerPage, metaData));
     setMetaData(metaData);
   };
 
@@ -96,10 +108,24 @@ const Home = () => {
         return a.dateTaken < b.dateTaken
       }
     });
+    setPages(groupByN(itemsPerPage, metaData));
     setMetaData(sortedMetaData);
     setSortOrder(!sortOrder);
   };
 
+  const nextPage = () => {
+    if (pageIndex < pages.length - 1) {
+      setPageIndex(pageIndex + 1);
+    }
+  }
+
+  const prevPage = () => {
+    if (pageIndex > 0) {
+      setPageIndex(pageIndex - 1);
+    }
+  }
+
+  // TODO: fix
   const filterByDates = () => {
     const filterStartDate = document.querySelector('#filterStartDate');
     const filterEndDate = document.querySelector('#filterEndDate');
@@ -120,12 +146,14 @@ const Home = () => {
     
     setMetaData(metaData.slice(startIndex, endIndex));
     // To index in array
+    /*
     const index = 0;
     let currentDate = metaDataRef.current[index].dateTaken;
     currentDate = currentDate.split('T').shift();
     setmetaCurrentDate(currentDate);
     setmetaCurrentYear(currentDate.split('-')[0]);
     setmetaCurrentMonth(currentDate.split('-')[1]);
+    */
   }
 
   return (
@@ -137,31 +165,32 @@ const Home = () => {
           toggleColumns={toggleColumns} 
           sortByDate={sortByDate} 
           filterByDates={filterByDates} 
-          noPhotos={metaData.length} 
-          // startDate='2000-01-01'
+          nextPage={nextPage} 
+          prevPage={prevPage} 
+          noPhotos={pages.length > 0 && pages[0].length} 
           startDate={metaCurrentDate}
-          // startDate={metaData[0].dateTaken.toString().split('T').shift()} 
           />
         <div>
           <Gallery withCaption id="my-gallery">
-          {groupByN(columns, metaData).map((group, index) => (
+          { pages.length > 0 &&
+          groupByN(columns, pages[pageIndex]).map((group, index) => (
             <div key={index} className="row align-items-center g-1 mb-1">
-              {group.map(currentMetaData =>
-                <div className="col" style={{display: 'flex', justifyContent:'center'}}key={currentMetaData.guid}>
+              {group.map(m =>
+                <div className="col" style={{display: 'flex', justifyContent:'center'}}key={m.guid}>
                   <Item
-                    id={currentMetaData.guid}
-                    original={"photos/" + currentMetaData.guid}
-                    thumbnail={"photos/" + currentMetaData.guid + "/thumb"}
-                    width={currentMetaData.width}
-                    height={currentMetaData.height}
+                    id={m.guid}
+                    original={"photos/" + m.guid}
+                    thumbnail={"photos/" + m.guid + "/thumb"}
+                    width={m.width}
+                    height={m.height}
                     caption={
-                      currentMetaData.dateTaken + " - " + 
-                      currentMetaData.name + " - " + 
-                      currentMetaData.width + "x" + currentMetaData.height + " - " + 
-                      currentMetaData.sizeKb + "kB"}
+                      m.dateTaken + " - " + 
+                      m.name + " - " + 
+                      m.width + "x" + m.height + " - " + 
+                      m.sizeKb + "kB"}
                     >
                     {({ ref, open }) => (
-                      <img ref={ref} onClick={open} src={"photos/" + currentMetaData.guid + "/thumb"} alt={currentMetaData.dateTaken}/>
+                      <img ref={ref} onClick={open} src={"photos/" + m.guid + "/thumb"} alt={m.dateTaken}/>
                     )}
                   </Item>
                 </div>

@@ -5,8 +5,8 @@ const TopItems = (props) => {
   const [isOpen, setIsOpen] = useState(false);
   const [filterDateIsOpen, setFilterDateIsOpen] = useState(false);
   
-  const [startDate, setStartDate] = useState((new Date()).toISOString().split('T').shift());
-  const [endDate, setEndDate] = useState((new Date()).toISOString().split('T').shift());
+  // const [startDate, setStartDate] = useState((new Date()).toISOString().split('T').shift());
+  // const [endDate, setEndDate] = useState((new Date()).toISOString().split('T').shift());
 
   useEffect(() => { 
     window.addEventListener('scroll', handleScroll);
@@ -24,9 +24,17 @@ const TopItems = (props) => {
     setIsOpen(!isOpen);
   };
   
-  const toggleDatePicker = () => {
-    setFilterDateIsOpen(!filterDateIsOpen);
-  };
+  // const toggleDatePicker = () => {
+  //   setFilterDateIsOpen(!filterDateIsOpen);
+  // };
+
+  const buttons = [
+    { name: 'Next page', action: props.nextPage, closeAfterAction: false, icon: './right-arrow-2.svg'},
+    { name: 'Prev page', action: props.prevPage, closeAfterAction: false, icon: './left-arrow-2.svg'},
+    { name: 'Zoom', action: props.toggleColumns, closeAfterAction: false, icon: './magnifier.svg' },
+    { name: 'Reverse sort', action: props.sortByDate, closeAfterAction: true },
+    // { name: 'Filter date', action: toggleDatePicker, closeAfterAction: true }
+  ]
 
   return (
     <div className="fixed">
@@ -42,6 +50,34 @@ const TopItems = (props) => {
         <div className="dropdown-menu-container">
           <div className="dropdown-menu">
             <ul>
+              {buttons.map((button, index) => (
+                <li key={index}>
+                  <button onClick={() => {
+                    button.action();
+                    if (button.closeAfterAction) {
+                      setIsOpen(false);
+                    }
+                  }}>
+                    {button.icon &&
+                      <img src={button.icon} alt={button.name} width="20px" style={{marginRight: '15px'}}/> 
+                    }
+                    {button.name}
+                  </button>
+                </li>
+              ))}
+
+              {/* <li>
+                  <button onClick={() => {props.nextPage();}}>
+                    <img src="./right_arrow.svg" alt="Next page" width="20px"/>
+                    Next page
+                    </button>
+              </li>
+              <li>
+                  <button onClick={() => {props.prevPage();}}>
+                    <img src="./left_arrow.svg" alt="Next page" width="20px"/>
+                    Prev page
+                    </button>
+              </li>
               <li>
                   <button onClick={() => {
                     props.toggleColumns(); 
@@ -51,8 +87,9 @@ const TopItems = (props) => {
                   <button onClick={() => {
                     props.sortByDate(); 
                     setIsOpen(false)}}>Reverse sort</button>
-              </li>
-              <li>
+              </li> */}
+
+              {/* <li>
                 <div>
                   <button onClick={() => {
                     toggleDatePicker();
@@ -85,7 +122,7 @@ const TopItems = (props) => {
                     </div>
                   }
                 </div>
-              </li>
+              </li> */}
             </ul>
           </div>
         </div>
