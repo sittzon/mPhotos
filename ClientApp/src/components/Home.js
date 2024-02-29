@@ -59,7 +59,7 @@ const Home = () => {
     const index = Math.max(0, Math.floor(percentScroll * pagesRef.current[pageIndexRef.current].length));
     // Get dateTaken of index image
     let currentDate = pagesRef.current[pageIndexRef.current][index].dateTaken;
-    console.log(percentScroll + " -> " + index + " -> " + currentDate);
+    // console.log(percentScroll + " -> " + index + " -> " + currentDate);
     currentDate = currentDate.split('T').shift();
     setmetaCurrentDate(currentDate);
     setmetaCurrentYear(currentDate.split('-')[0]);
@@ -176,7 +176,7 @@ const Home = () => {
           groupByN(columns, pages[pageIndex]).map((group, index) => (
             <div key={index} className="row align-items-center g-1 mb-1">
               {group.map(m =>
-                <div className="col" style={{display: 'flex', justifyContent:'center'}}key={m.guid}>
+                <div className="col" style={{display: 'flex', justifyContent:'center'}} key={m.guid}>
                   <Item
                     id={m.guid}
                     original={"photos/" + m.guid}
@@ -190,7 +190,14 @@ const Home = () => {
                       m.sizeKb + "kB"}
                     >
                     {({ ref, open }) => (
-                      <img ref={ref} onClick={open} src={"photos/" + m.guid + "/thumb"} alt={m.dateTaken}/>
+                      <img 
+                        ref={ref} 
+                        onClick={open} 
+                        src={"photos/" + m.guid + "/thumb"} 
+                        alt={m.dateTaken} 
+                        loading={`${index > 12? "lazy" : "eager"}`} 
+                        fetchpriority={`${index > 12}? 'auto : 'high'`}
+                      />
                     )}
                   </Item>
                 </div>

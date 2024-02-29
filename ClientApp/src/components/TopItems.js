@@ -37,7 +37,7 @@ const TopItems = (props) => {
   ]
 
   return (
-    <div className="fixed">
+    <div className="fixed" style={{zIndex: '1'}}>
       
       <div className="info-and-menu">
         <p className="text-rounded-corners">{props.noPhotos} photos</p>
@@ -59,7 +59,13 @@ const TopItems = (props) => {
                     }
                   }}>
                     {button.icon &&
-                      <img src={button.icon} alt={button.name} width="20px" style={{marginRight: '15px'}}/> 
+                      <img src={button.icon} 
+                        alt={button.name} 
+                        width="20px" 
+                        style={{marginRight: '15px'}} 
+                        loading='eager'
+                        fetchpriority='high'
+                      /> 
                     }
                     {button.name}
                   </button>
