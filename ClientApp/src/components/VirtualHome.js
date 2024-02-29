@@ -9,7 +9,7 @@ import 'photoswipe/dist/photoswipe.css'
 import Cookies from 'universal-cookie';
 import './Home.css';
 
-const VirtaulHome = () => {
+const VirtualHome = () => {
   // The 'useState' hook (function) returns a getter (variable) & setter (function) for your state value
   // and takes the initial/default value for it/to set it to, e.g.
   const [ columns, setColumns ] = useState(5);
@@ -167,26 +167,13 @@ const VirtaulHome = () => {
   }
 
   const Row = ({ index, style }) => {
-    // const isEvenRow = index % 2 === 0;
-    // const backgroundColor = isEvenRow ? '#F9A03F' : '#FDDB3A';
-    // const textColor = isEvenRow ? '#FFFFFF' : '#4A4A4A';
     const rowStyle = {
       ...style,
-      // backgroundColor,
-      // color: textColor,
-      
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '0 16px',
+      padding: '0 8px',
     };
-    // return (
-    //   <div style={rowStyle}>
-    //     <p>{metaData[index].guid}</p>
-    //     <p>{metaData[index].name}</p>
-    //     <p>{metaData[index].sizeKb}</p>
-    //   </div>
-    // );
 
     let allImgColumnIndex = [0,1,2,3,4,5,6];
     return (
@@ -224,69 +211,35 @@ const VirtaulHome = () => {
                 id={index*columns+i} 
                 src={"photos/" + allMetaData[index*columns+i].guid + "/thumb"} 
                 alt="alt" 
-                style={{ maxWidth: (90.0 / columns)+'%'}}
+                style={{ maxWidth: (90.0 / columns)+'%', display: 'flex', justifyContent: 'center'}}
               />
             )
           })}
-
-          {/* {index*columns < allMetaData.length &&
-            <img src={"photos/" + allMetaData[index*columns].guid + "/thumb"} alt="alt"/>
-          }
-          {index*columns + 1 < allMetaData.length &&
-            <img src={"photos/" + allMetaData[index*columns+1].guid + "/thumb"} alt="alt" style={{ maxWidth: (90.0 / columns)+'%'}}/>
-          }
-          {index*columns + 2 < allMetaData.length &&
-            <img src={"photos/" + allMetaData[index*columns+2].guid + "/thumb"} alt="alt" style={{ maxWidth: (90.0 / columns)+'%'}}/>
-          }
-          { columns >= 5 && index*columns + 3 < allMetaData.length &&
-            <img src={"photos/" + allMetaData[index*columns+3].guid + "/thumb"} alt="alt" style={{ maxWidth: (90.0 / columns)+'%'}}/>
-          }
-          { columns >= 5 && index*columns + 4 < allMetaData.length &&
-            <img src={"photos/" + allMetaData[index*columns+4].guid + "/thumb"} alt="alt" style={{ maxWidth: (90.0 / columns)+'%'}}/>
-          }
-          { columns === 7 && index*columns + 5 < allMetaData.length &&
-            <img src={"photos/" + allMetaData[index*columns+5].guid + "/thumb"} alt="alt" style={{ maxWidth: (90.0 / columns)+'%'}}/>
-          }
-          { columns === 7 && index*columns + 6 < allMetaData.length &&
-            <img src={"photos/" + allMetaData[index*columns+6].guid + "/thumb"} alt="alt" style={{ maxWidth: (90.0 / columns)+'%'}}/>
-          } */}
-
       </div>
     )
   };
 
   const getItemSize = index => {
-    return 220;
-    const defaultValue = 200;
+    const defaultValue = 220;
     const totalWidth = window.screen.width;
-    // console.log('totalWidth: ' + totalWidth);
     if (!totalWidth) {
-      // console.log('!totalWidth');
       return defaultValue;
     }
-    const imgWidth = totalWidth / columns; //16px padding
+    const imgWidth = (totalWidth - 10*(columns+1)) / columns; //10px padding
     if (!imgWidth) {
-      // console.log('!imgWidth');
       return defaultValue;
     }
     const imgHeight = imgWidth * 1.5; // Maximum 3:2 aspect ratio
     if (!imgHeight) {
-      // console.log('!imgHeight');
       return defaultValue;
     }
 
     // console.log('imgHeight: ' + imgHeight);
-
-    return imgHeight;
-  };
-
-  const galleryOptions = {
-    zoom: false,
-    bgOpacity: 0.2,
+    return Math.min(imgHeight, defaultValue);
   };
 
   return (
-    <div style={{ height: '95vh'}}>
+    <div style={{ height: '80vh'}}>
       <h2 className="text-rounded-corners" style={{position: 'fixed', top:'55px', marginLeft: "10px", zIndex: '1'}}>
         {months[+metaCurrentMonth - 1]} {metaCurrentYear} 
       </h2>
@@ -298,51 +251,20 @@ const VirtaulHome = () => {
         startDate={metaCurrentDate}
         />
 
-        {/* <div id="gallery"> */}
-
-          <Gallery withCaption id="my-gallery" options={galleryOptions}>
-            <AutoSizer id="gallery">
-              {({ height, width }) => (
-                <VariableSizeList 
-                // height={height} 
-                height={height} 
-                width={width} 
-                itemSize={getItemSize} 
-                itemCount={groupByN(columns, allMetaData).length}
-                >
-                  {Row}
-                </VariableSizeList>
-              )}
-            </AutoSizer>
-
-          {/* {groupByN(columns, allMetaData).map((group, index) => (
-            <div key={index} className="row align-items-center g-1 mb-1">
-            {group.map(currentMetaData =>
-              <div className="col" style={{display: 'flex', justifyContent:'center'}}key={currentMetaData.guid}>
-              <Item
-              id={currentMetaData.guid}
-              original={"photos/" + currentMetaData.guid}
-              thumbnail={"photos/" + currentMetaData.guid + "/thumb"}
-              width={currentMetaData.width}
-              height={currentMetaData.height}
-              caption={
-                currentMetaData.dateTaken + " - " + 
-                currentMetaData.name + " - " + 
-                currentMetaData.width + "x" + currentMetaData.height + " - " + 
-                currentMetaData.sizeKb + "kB"}
-                >
-                {({ ref, open }) => (
-                  <img ref={ref} onClick={open} src={"photos/" + currentMetaData.guid + "/thumb"} alt={currentMetaData.dateTaken}/>
-                  )}
-                  </Item>
-                  </div>
-                  )}
-                  </div>
-                ))} */}
-
-          </Gallery>
+      <AutoSizer id="gallery">
+        {({ height, width }) => (
+          <VariableSizeList 
+            height={height} 
+            width={width} 
+            itemSize={getItemSize} 
+            itemCount={groupByN(columns, allMetaData).length}
+          >
+            {Row}
+          </VariableSizeList>
+        )}
+      </AutoSizer>
     </div>
   );
 };
 
-export default VirtaulHome;
+export default VirtualHome;
