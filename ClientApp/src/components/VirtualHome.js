@@ -5,6 +5,7 @@ import { FixedSizeList, VariableSizeList } from 'react-window';
 import AutoSizer from "react-virtualized-auto-sizer";
 // import useScreenSize from '../useScreenSize';
 import TopItems from './TopItems';
+import MLightbox from './MLightbox';
 import 'photoswipe/dist/photoswipe.css'
 import Cookies from 'universal-cookie';
 import './Home.css';
@@ -166,6 +167,11 @@ const VirtualHome = () => {
     setmetaCurrentMonth(currentDate.split('-')[1]);
   }
 
+  const imageClicked = (id, index, caption) => {
+    const evt = new CustomEvent('img-clicked', { detail: {id: id, index: index, caption: caption}}); 
+    window.dispatchEvent(evt);
+  };
+
   const Row = ({ index, style }) => {
     const rowStyle = {
       ...style,
@@ -178,31 +184,6 @@ const VirtualHome = () => {
     let allImgColumnIndex = [0,1,2,3,4,5,6];
     return (
       <div style={rowStyle}>
-        {/* {console.log(currentMetaDataRef.current)}
-          {currentMetaDataRef.current[index] && 
-            currentMetaDataRef.current[index].map((m, index) => {
-            return(
-              <Item
-                style={{...style}}
-                id={m.guid}
-                original={"photos/" + m.guid}
-                thumbnail={"photos/" + m.guid + "/thumb"}
-                width={m.width}
-                height={m.height}
-                caption={
-                  m.dateTaken + " - " + 
-                  m.name + " - " + 
-                  m.width + "x" + m.height + " - " + 
-                  m.sizeKb + "kB"}
-                  >
-                  {({ ref, open }) => (
-                    <img ref={ref} onClick={open} src={"photos/" + m.guid + "/thumb"} alt={m.dateTaken}/>
-                    )}
-                </Item>
-              )
-            })
-          } */}
-
           {allImgColumnIndex.map((i) => {
             return(
               i < columns && index*columns + i < allMetaData.length &&
@@ -212,6 +193,9 @@ const VirtualHome = () => {
                 src={"photos/" + allMetaData[index*columns+i].guid + "/thumb"} 
                 alt="alt" 
                 style={{ maxWidth: (90.0 / columns)+'%', display: 'flex', justifyContent: 'center'}}
+                onClick={(event) => {
+                  imageClicked(allMetaData[index*columns+i].guid, index*columns+i, event.target.alt);
+                }}
               />
             )
           })}
@@ -249,7 +233,7 @@ const VirtualHome = () => {
         filterByDates={filterByDates} 
         noPhotos={allMetaData.length} 
         startDate={metaCurrentDate}
-        />
+      />
 
       <AutoSizer id="gallery">
         {({ height, width }) => (
@@ -263,6 +247,10 @@ const VirtualHome = () => {
           </VariableSizeList>
         )}
       </AutoSizer>
+
+      <MLightbox
+        metaData={allMetaData}
+      />
     </div>
   );
 };
