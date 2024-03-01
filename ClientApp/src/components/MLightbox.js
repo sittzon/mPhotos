@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import useEmblaCarousel from 'embla-carousel-react'
+// import useEmblaCarousel from 'embla-carousel-react'
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Zoom, Virtual, Keyboard } from 'swiper/modules';
+import 'swiper/css';
 import './MLightbox.css';
 
 const MLightbox = (props) => {;
@@ -8,7 +11,7 @@ const MLightbox = (props) => {;
   const [ currentGuid, setCurrentGuid ] = useState('');
   const [ currentCaption, setCurrentCaption ] = useState('');
   const [ currentIndexes, setCurrentIndexes ] = useState([]);
-  const [emblaRef] = useEmblaCarousel();
+  // const [emblaRef] = useEmblaCarousel();
   // useEmblaCarousel.globalOptions = { loop: true }
   
   useEffect(() => { 
@@ -57,28 +60,31 @@ const MLightbox = (props) => {;
               toggleLightboxVisible();
             }}
           >
-
-            <div className="embla" ref={emblaRef}>
-                <div className="embla__container">
-                {currentIndexes
-                  .map((item, index) => 
-                  <div className="embla__slide">
+              <Swiper
+                modules={[Zoom, Virtual, Keyboard]}
+                initialSlide={currentIndex}
+                spaceBetween={50}
+                slidesPerView={1}
+                onSlideChange={() => console.log('slide change')}
+                onSwiper={(swiper) => console.log(swiper)}
+              >
+                {props.metaData
+                  .map((slideContent, index) => 
+                  <SwiperSlide key={slideContent.guid} virtualIndex={index}>
                     <div>
-                      <p>{item} of {props.metaData.length}</p>
-                      <img key={props.metaData[item].guid+'_full'}
-                        src={'photos/' + props.metaData[item].guid}
-                        width={props.metaData[item].width}
-                        loading={`${item === currentIndex? "eager" : "lazy"}`}
-                        alt={props.metaData[item].dateTaken} 
+                      <p>{index} of {props.metaData.length}</p>
+                      <img 
+                        key={slideContent.guid}
+                        src={'photos/' + slideContent.guid}
+                        alt={slideContent.dateTaken} 
                         />
-                      <p>{props.metaData[item].dateTaken}</p>
+                      <p>{slideContent.dateTaken}</p>
                     </div>
-                  </div>
+                  </SwiperSlide>
                   )
                 }
-              </div>
-            </div>
-          </div>
+          </Swiper>
+        </div>
         }
       </>
   );

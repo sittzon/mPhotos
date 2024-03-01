@@ -227,7 +227,9 @@ const VirtualHome = () => {
   };
 
   return (
-    <div style={{ height: '80vh'}}>
+    <div 
+      style={{ height: '80vh'}}
+    >
       <h2 className="text-rounded-corners" style={{position: 'fixed', top:'55px', marginLeft: "10px", zIndex: '1'}}>
         {months[+metaCurrentMonth - 1]} {metaCurrentYear} 
       </h2>
