@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "bootstrap": "^5.2.3",
+    "embla-carousel-react": "^8.0.0",
     "http-proxy-middleware": "^2.0.6",
     "jquery": "^3.6.4",
     "merge": "^2.1.1",

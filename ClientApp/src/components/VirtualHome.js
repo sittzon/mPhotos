@@ -189,9 +189,13 @@ const VirtualHome = () => {
               i < columns && index*columns + i < allMetaData.length &&
               <img 
                 key={index*columns+i} 
-                id={index*columns+i} 
+                id={allMetaData[index*columns+i].guid} 
                 src={"photos/" + allMetaData[index*columns+i].guid + "/thumb"} 
-                alt="alt" 
+                alt={
+                  allMetaData[index*columns+i].dateTaken + " - " + 
+                  allMetaData[index*columns+i].name + " - " + 
+                  allMetaData[index*columns+i].width + "x" + allMetaData[index*columns+i].height + " - " + 
+                  allMetaData[index*columns+i].sizeKb + "kB"}
                 style={{ maxWidth: (90.0 / columns)+'%', display: 'flex', justifyContent: 'center'}}
                 onClick={(event) => {
                   imageClicked(allMetaData[index*columns+i].guid, index*columns+i, event.target.alt);
