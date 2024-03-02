@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-// import useEmblaCarousel from 'embla-carousel-react'
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Zoom, Virtual, Keyboard } from 'swiper/modules';
 import 'swiper/css';
@@ -10,26 +9,20 @@ const MLightbox = (props) => {;
   const [ currentIndex, setCurrentIndex ] = useState(0);
   const [ currentGuid, setCurrentGuid ] = useState('');
   const [ currentCaption, setCurrentCaption ] = useState('');
-  const [ currentIndexes, setCurrentIndexes ] = useState([]);
-  // const [emblaRef] = useEmblaCarousel();
-  // useEmblaCarousel.globalOptions = { loop: true }
+  const [ metaData, setMetaData ] = useState();
   
   useEffect(() => { 
     window.addEventListener('img-clicked', showLightbox);
 
-    // setMetaData(props.metaData);
+    setMetaData(props.metaData); 
   }, []);
 
   const showLightbox = (event) => {
     const guid = event.detail.id;
     const index = event.detail.index;
-    // console.log(event.detail);
     setCurrentGuid(guid);
     setCurrentIndex(index);
     setCurrentCaption(event.detail.caption);
-
-    // setCurrentIndexes([index-1,index,index+1]);
-    setCurrentIndexes([index,index+1,index+2]);
 
     toggleLightboxVisible();
   };
@@ -63,8 +56,13 @@ const MLightbox = (props) => {;
               <Swiper
                 modules={[Zoom, Virtual, Keyboard]}
                 initialSlide={currentIndex}
-                spaceBetween={50}
+                // spaceBetween={10}
                 slidesPerView={1}
+                virtual={true}
+                grabCursor={true}
+                keyboard={true}
+                zoom={true}
+                speed={150}
                 onSlideChange={() => console.log('slide change')}
                 onSwiper={(swiper) => console.log(swiper)}
               >
@@ -73,13 +71,15 @@ const MLightbox = (props) => {;
                   <SwiperSlide key={slideContent.guid} virtualIndex={index}>
                     <div>
                       <p>{index} of {props.metaData.length}</p>
-                      <img 
-                        key={slideContent.guid}
-                        src={'photos/' + slideContent.guid}
-                        alt={slideContent.dateTaken} 
-                        />
+                      {/* <div class="swiper-zoom-container"> */}
+                        <img 
+                          key={slideContent.guid}
+                          src={'photos/' + slideContent.guid}
+                          alt={slideContent.dateTaken} 
+                          />
+                      {/* </div> */}
                       <p>{slideContent.dateTaken}</p>
-                    </div>
+                      </div>
                   </SwiperSlide>
                   )
                 }
