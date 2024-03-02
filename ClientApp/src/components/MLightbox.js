@@ -57,12 +57,18 @@ const MLightbox = (props) => {;
                 modules={[Zoom, Virtual, Keyboard]}
                 initialSlide={currentIndex}
                 // spaceBetween={10}
-                slidesPerView={1}
-                virtual={true}
+                virtual={{
+                  enabled: true,
+                  addSlidesAfter: 1,
+                  addSlidesBefore: 1,
+                  cache: true
+                }}
                 grabCursor={true}
                 keyboard={true}
                 zoom={true}
                 speed={150}
+                lazyPreloadPrevNext={1}
+                updateOnWindowResize={true}
                 onSlideChange={() => console.log('slide change')}
                 onSwiper={(swiper) => console.log(swiper)}
               >
@@ -76,7 +82,9 @@ const MLightbox = (props) => {;
                           key={slideContent.guid}
                           src={'photos/' + slideContent.guid}
                           alt={slideContent.dateTaken} 
+                          loading={`${index === currentIndex? "eager" : "lazy"}`} 
                           />
+                          <div className="swiper-lazy-preloader"></div>
                       {/* </div> */}
                       <p>{slideContent.dateTaken}</p>
                       </div>
