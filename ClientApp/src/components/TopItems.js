@@ -16,7 +16,7 @@ const TopItems = (props) => {
     };
   }, []);
 
-  const handleScroll = async (event) => {
+  const handleScroll = async () => {
     setIsOpen(false);
   };
   
@@ -29,15 +29,15 @@ const TopItems = (props) => {
   // };
 
   const buttons = [
+    { name: 'Zoom', action: props.toggleColumns, closeAfterAction: false, icon: './magnifier.svg' },
     { name: 'Next page', action: props.nextPage, closeAfterAction: false, icon: './right-arrow-2.svg'},
     { name: 'Prev page', action: props.prevPage, closeAfterAction: false, icon: './left-arrow-2.svg'},
-    { name: 'Zoom', action: props.toggleColumns, closeAfterAction: false, icon: './magnifier.svg' },
     { name: 'Reverse sort', action: props.sortByDate, closeAfterAction: true },
     // { name: 'Filter date', action: toggleDatePicker, closeAfterAction: true }
   ]
 
   return (
-    <div className="fixed" style={{zIndex: '1'}}>
+    <div className="fixed">
       
       <div className="info-and-menu">
         <p className="text-rounded-corners">{props.noPhotos} photos</p>

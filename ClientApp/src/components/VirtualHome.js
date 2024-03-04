@@ -38,12 +38,6 @@ const VirtualHome = () => {
       setColumns(cookieColumns);
     }
     
-    // window.querySelector
-    window.addEventListener('scroll', handleScroll);
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
   }, []);
   
   const allMetaDataRef = useRef(allMetaData);
@@ -58,17 +52,6 @@ const VirtualHome = () => {
 
 
   const handleScroll = async (event) => {
-    // const scroll = percentScroll();
-
-    // // To index in array
-    // const index = Math.max(0, Math.floor(scroll * allMetaDataRef.current.length));
-    // let currentDate = allMetaDataRef.current[index].dateTaken;
-    // currentDate = currentDate.split('T').shift();
-    // setmetaCurrentDate(currentDate);
-    // setmetaCurrentYear(currentDate.split('-')[0]);
-    // setmetaCurrentMonth(currentDate.split('-')[1]);
-
-
     if (allMetaDataRef.current.length === 0) {
       return;
     }
@@ -76,22 +59,23 @@ const VirtualHome = () => {
     // Get scroll percent of page
     const percentScroll = scrollPercent();
     // Convert to index in array
-    const index = Math.max(0, Math.floor(percentScroll * allMetaDataRef.current.length));
+    const index = Math.max(0, Math.floor(percentScroll * allMetaDataRef.current.length) - 1);
     // Get dateTaken of index image
-    let currentDate = allMetaDataRef.current[allMetaDataRef.current][index].dateTaken;
-    console.log(percentScroll + " -> " + index + " -> " + currentDate);
+    let currentDate = allMetaDataRef.current[index].dateTaken;
+    // console.log(percentScroll + " -> " + index + " -> " + currentDate);
     currentDate = currentDate.split('T').shift();
     setmetaCurrentDate(currentDate);
     setmetaCurrentYear(currentDate.split('-')[0]);
     setmetaCurrentMonth(currentDate.split('-')[1]);
-
-
   };
 
   const scrollPercent = () => {
-    var body = document.body, html = document.documentElement;
-    var height = Math.max(body.scrollHeight, body.offsetHeight, html.clientHeight, html.scrollHeight, html.offsetHeight);
-    return window.scrollY / height;
+    const currentHeight = document.querySelector('#gallery div div').style['height'];
+    const rowHeight = getItemSize();
+    const rowCount = groupByN(columns, allMetaData).length;
+    const totalHeight = rowHeight * rowCount;
+
+    return parseInt(currentHeight) / parseInt(totalHeight);
   }
 
   const groupByN = (n, arr) => {
@@ -227,12 +211,7 @@ const VirtualHome = () => {
   };
 
   return (
-    <div 
-      style={{ height: '80vh'}}
-    >
-      <h2 className="text-rounded-corners" style={{position: 'fixed', top:'55px', marginLeft: "10px", zIndex: '1'}}>
-        {months[+metaCurrentMonth - 1]} {metaCurrentYear} 
-      </h2>
+    <>
       <TopItems 
         toggleColumns={toggleColumns} 
         sortByDate={sortByDate} 
@@ -240,6 +219,9 @@ const VirtualHome = () => {
         noPhotos={allMetaData.length} 
         startDate={metaCurrentDate}
       />
+      <h2 className="text-rounded-corners fixed" style={{top:'55px', marginLeft: "10px"}}>
+        {months[+metaCurrentMonth - 1]} {metaCurrentYear} 
+      </h2>
 
       <AutoSizer id="gallery">
         {({ height, width }) => (
@@ -248,6 +230,7 @@ const VirtualHome = () => {
             width={width} 
             itemSize={getItemSize} 
             itemCount={groupByN(columns, allMetaData).length}
+            onScroll={handleScroll}
           >
             {Row}
           </VariableSizeList>
@@ -257,7 +240,7 @@ const VirtualHome = () => {
       <MLightbox
         metaData={allMetaData}
       />
-    </div>
+      </>
   );
 };
 
