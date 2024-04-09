@@ -60,6 +60,10 @@
   }
 }
 
+.swiper-zoom-container {
+  max-height: 95%;
+}
+
 /* .swiper-slide > div {
   display: flex;
   flex-direction: column;
