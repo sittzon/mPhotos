@@ -10,6 +10,8 @@ namespace mPhotos.Controllers;
 [Route("[controller]")]
 public class PhotosController : ControllerBase
 {
+    private static readonly string photosRoot = @"";
+    private static readonly string thumbnailRoot = @"";
     private static readonly string metaDataFilename = thumbnailRoot + "/metadata.json";
     private static readonly string errorLogFilename = thumbnailRoot + "/errors.log";
     private readonly IMemoryCache _memoryCache;
