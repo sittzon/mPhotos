@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Zoom, Virtual, Keyboard } from 'swiper/modules';
 import 'swiper/css';
+import 'swiper/css/virtual';
 import './MLightbox.css';
 
 const MLightbox = (props) => {;
@@ -56,18 +57,12 @@ const MLightbox = (props) => {;
               <Swiper
                 modules={[Zoom, Virtual, Keyboard]}
                 initialSlide={currentIndex}
-                // spaceBetween={10}
-                virtual={{
-                  enabled: true,
-                  addSlidesAfter: 1,
-                  addSlidesBefore: 1,
-                  cache: true
-                }}
+                virtual
                 grabCursor={true}
                 keyboard={true}
                 zoom={true}
                 speed={150}
-                lazyPreloadPrevNext={1}
+                lazyPreloadPrevNext={2}
                 updateOnWindowResize={true}
                 onSlideChange={() => console.log('slide change')}
                 onSwiper={(swiper) => console.log(swiper)}
@@ -77,16 +72,16 @@ const MLightbox = (props) => {;
                   <SwiperSlide key={slideContent.guid} virtualIndex={index}>
                     <div>
                       <p>{index} of {props.metaData.length}</p>
-                      {/* <div class="swiper-zoom-container"> */}
+                      <div className="swiper-zoom-container">
                         <img 
                           key={slideContent.guid}
                           src={'photos/' + slideContent.guid}
-                          alt={slideContent.dateTaken} 
+                          alt={slideContent.dateTaken.replace('T',' ')} 
                           loading={`${index === currentIndex? "eager" : "lazy"}`} 
                           />
                           <div className="swiper-lazy-preloader"></div>
-                      {/* </div> */}
-                      <p>{slideContent.dateTaken}</p>
+                      </div>
+                      <p>{slideContent.dateTaken.replace('T',' ')}</p>
                       </div>
                   </SwiperSlide>
                   )
