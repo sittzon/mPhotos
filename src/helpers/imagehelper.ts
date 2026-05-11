@@ -209,6 +209,19 @@ export function getHashString(str: string): string {
     return crypto.createHash('sha256').update(str).digest('hex');
 }
 
+const HASH_CHUNK_SIZE = 512 * 1024;
+export async function getFileContentHash(filePath: string): Promise<string> {
+    const hash = crypto.createHash('sha256');
+    const fileHandle = await fs.open(filePath, 'r');
+    try {
+        const { buffer } = await fileHandle.read(Buffer.alloc(HASH_CHUNK_SIZE), 0, HASH_CHUNK_SIZE, 0);
+        hash.update(buffer);
+    } finally {
+        await fileHandle.close();
+    }
+    return hash.digest('hex');
+}
+
 // Resize and save as webp
 export async function generateThumbnailBytes(imagePath: string, w: number, h: number, outPath: string, quality = 80, isHeic: boolean = false): Promise<void> {
     let sharpBuffer: sharp.Sharp;

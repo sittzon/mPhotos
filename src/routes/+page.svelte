@@ -97,8 +97,8 @@
             }));
             
             // Originally filter out live-photo-videos 
-            // photosAndVideosMetadata = originalPhotosMetadataExtended
-            //     .filter((photo: PhotoModelExtended) => photo.type == 'photo' || photo.type == 'video');
+            photosAndVideosMetadata = originalPhotosMetadataExtended;
+                // .filter((photo: PhotoModelExtended) => photo.type == 'photo' || photo.type == 'video');
                 
             filterPhotosArray();
                 
@@ -531,7 +531,7 @@
             >
 
         <div slot="item" let:index let:style {style}>
-            <table style="width: 100%; table-layout: fixed;">
+            <table style="width: 100%; height: 100%; table-layout: fixed;">
                 <tbody>
                     <tr style="text-align:center;">
                         {#each chunkedPhotos[index] as currentPhotoMeta, itemIndex}
@@ -542,9 +542,9 @@
                                         id={currentPhotoMeta.guid}
                                         src="api/photos/{currentPhotoMeta.guid}/thumb"
                                         alt={currentPhotoMeta.dateTaken}
-                                        style={showSquareThumbs
-                                            ? `height: ${rowHeights[index]-2}px; width: ${rowHeights[index]-2}px; object-fit: cover;`
-                                            : `max-height: ${rowHeights[index]-2}px;`}
+                                        class:square-thumb={showSquareThumbs}
+                                        style="--row-height: {rowHeights[index]-2}px;"
+
                                         >
                                         {#if currentPhotoMeta.type === 'video' || currentPhotoMeta.type === 'live-photo-video'}
                                             {#if currentPhotoMeta.lengthSeconds}
@@ -657,9 +657,15 @@
     }
 
     td a img {
-        max-height: 100%;
+        max-height: var(--row-height);
         border-radius: 5px;
         max-width: 100%;
+    }
+    
+    td a img.square-thumb {
+        object-fit: cover;
+        width: var(--row-height);
+        height: var(--row-height);
     }
 
     .nr-of-photos {
