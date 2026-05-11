@@ -286,6 +286,8 @@
     // Split any array into groups of n size
     const chunkArray = (array: Array<any>, size: number) => {
         const chunked = [];
+        // Push empty row at top
+        chunked.push([]);
         for (let i = 0; i < array.length; i += size) {
             chunked.push(array.slice(i, i + size));
         }
@@ -332,15 +334,18 @@
         const windowInnerWidth = window.innerWidth;
         const maxImgWidth = windowInnerWidth / chunkSize;
 
+        // Row height 80px at the top
+        rowHeights.push(80);
+
         if (useSquareThumbs) {
-            for (let i = 0; i < chunkedPhotos.length; ++i) {
+            for (let i = 1; i < chunkedPhotos.length; ++i) {
                 rowHeights.push(maxImgWidth); // fixed size for square thumbs
             }
             if (currentNoPhotos > 0) virtualList.recomputeSizes(0);
             return;
         }
         
-        for (let i = 0; i < chunkedPhotos.length; ++i) {
+        for (let i = 1; i < chunkedPhotos.length; ++i) {
             const chunk = chunkedPhotos[i];
             
             // Default thumb size is 225x300px
@@ -362,6 +367,7 @@
 
     // Opens photo modal
     const openModal = (photo: PhotoModelExtended, index: number) => {
+        console.log("Opening photo modal for index:", index);
         currentPhotoIndex = index;
         isPhotoModalOpen = true;
     }
