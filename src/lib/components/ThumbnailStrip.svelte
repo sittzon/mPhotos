@@ -48,7 +48,7 @@
       on:click={() => handleClick(start + i)}
     >
       <img
-        src={photo.thumb ?? photo.medium}
+        src={"api/photos/"+photo.guid+"/thumb"}
         alt={photo.dateTaken ?? `Photo ${start + i + 1}`}
         data-index={start + i}
         class:selected={start + i === currentIndex}

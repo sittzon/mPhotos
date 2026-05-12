@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { env } from '$env/dynamic/private'
 import type { PhotoServerModel, PhotoModel } from '$api';
-import { getImageDimensions, getVideoDimensions, getVideoDuration, generateVideoThumbnail, shutdownExifTool, getHashString, generateThumbnailBytes, getDateTakenFromPath } from '$helpers/imagehelper';
+import { getImageDimensions, getVideoDimensions, getVideoDuration, generateVideoThumbnail, shutdownExifTool, getHashString, generateThumbnailBytes, generateVideoLoopClip, getDateTakenFromPath } from '$helpers/imagehelper';
 import { getFileInfosRecursively, photosMetaCacheKey } from '$helpers/filehelper';
 import { memoryCache } from '$helpers/memorycache';
 
@@ -11,6 +11,8 @@ const originalsDir = env.ORIGINAL_PHOTOS || '/originals';
 const thumbsDir = env.GENERATED_THUMBNAILS || '/thumbs';
 const metaDataFilename = path.join(thumbsDir, env.METADATA_FILE || 'metadata.json');
 const errorLogFilename = path.join(thumbsDir, env.ERRORS_FILE || 'errors.log');
+const favoritesFilename = path.join(thumbsDir, env.FAVORITES_FILE || 'favorites.json');
+const trashFilename = path.join(thumbsDir, env.TRASH_FILE || 'trash.json');
 const thumbnailSizeWidth = Number(env.THUMBNAIL_SIZE) || 300;
 const mediumSizeWidth = Number(env.MEDIUM_SIZE) || 1200;
 const videoExts = ['.mp4', '.mov'];
@@ -102,26 +104,28 @@ async function loadPhotos() {
                 let type: 'photo' | 'video' | 'live-photo-video' = 'photo';
                 let lengthSeconds: number | null = null;
                 let isVideo = videoExts.includes(fileInfo.Extension.toLowerCase());
+                let dateTakenFromSidecar = false;
 
                 if (isVideo) {
                     [width, height] = await getVideoDimensions(fileInfo.FullName);
                     lengthSeconds = await getVideoDuration(fileInfo.FullName);
 
                     // Check if this is a sidecar live photo video by looking for a same-named photo file
-                    let dateTakenFromSidecar = false;
                     imageExts.forEach(async (imgExt) => {
                         // Strip extension from video file
                         const fileInfoWithoutExt = fileInfo.FullName.substring(0, fileInfo.FullName.lastIndexOf('.'));
                         const sidecarPath = path.join(fileInfoWithoutExt + imgExt);
                         // Check if photo exists in photoMetaData
-                        const potentialReferencePhoto = photoMetadata.find(x => x.location === sidecarPath);
-                        if (potentialReferencePhoto) {
+                        const referencePhoto = photoMetadata.find(x => x.location.toLowerCase() === sidecarPath.toLowerCase());
+                        if (referencePhoto) {
                             // Use date from sidecar photo file
                             dateTakenFromSidecar = true;
                             console.info(`Found sidecar live photo image: ${sidecarPath}`);
                             // Take date from photoMetaData
-                            dateTaken = potentialReferencePhoto.dateTaken;
+                            dateTaken = referencePhoto.dateTaken;
                             type = 'live-photo-video';
+                            referencePhoto.sidecarGuid = getHashString(fileInfo.FullName)
+                            console.debug(`Reference photo found: ${referencePhoto.sidecarGuid}`);
                             return;
                         }
                     });
@@ -150,42 +154,60 @@ async function loadPhotos() {
                     width: width,
                     height: height,
                     lengthSeconds: lengthSeconds,
-                    sizeKb: Math.floor(fileInfo.Length / 1024)
+                    sizeKb: Math.floor(fileInfo.Length / 1024),
+                    isFavorite: false,
+                    isTrash: false,
+                    sidecarGuid: null
                 };
                 photoMetadata.push(photoMeta);
                 photoMetadata.sort((a, b) => a.dateTaken.localeCompare(b.dateTaken));
 
-                const isHeic = fileInfo.Extension.toLowerCase() === '.heic' || fileInfo.Extension.toLowerCase() === '.heif';
-                // Split output path into two level subfolders, based on first 4 characters of GUID
-                const sub1 = photoMeta.guid.substring(0, 2);
-                const sub2 = photoMeta.guid.substring(2, 4);
-                const outDir = path.join(thumbsDir, sub1, sub2);
-                await fs.mkdir(outDir, { recursive: true });
-                
-                // Generate thumbnail
-                const thumbPath = path.join(thumbsDir, sub1, sub2, photoMeta.guid + '.webp');
-                const thumbFileExists = await fs.stat(thumbPath).then(() => true).catch(() => false);
-                if (!thumbFileExists) {
-                    const aspectRatio = photoMeta.width / photoMeta.height;
-                    const w = thumbnailSizeWidth;
-                    const h = Math.floor(photoMeta.height * (w / photoMeta.width));
-                    if (isVideo) {
-                        await generateVideoThumbnail(fileInfo.FullName, thumbPath, w, h);
-                    } else {
-                        await generateThumbnailBytes(fileInfo.FullName, w, h, thumbPath, 80, isHeic);
+                if (!dateTakenFromSidecar)
+                {
+                    const isHeic = fileInfo.Extension.toLowerCase() === '.heic' || fileInfo.Extension.toLowerCase() === '.heif';
+                    // Split output path into two level subfolders, based on first 4 characters of GUID
+                    const sub1 = photoMeta.guid.substring(0, 2);
+                    const sub2 = photoMeta.guid.substring(2, 4);
+                    const outDir = path.join(thumbsDir, sub1, sub2);
+                    await fs.mkdir(outDir, { recursive: true });
+                    
+                    // Generate thumbnail
+                    const thumbPath = path.join(thumbsDir, sub1, sub2, photoMeta.guid + '.webp');
+                    const thumbFileExists = await fs.stat(thumbPath).then(() => true).catch(() => false);
+                    if (!thumbFileExists) {
+                        const aspectRatio = photoMeta.width / photoMeta.height;
+                        const w = thumbnailSizeWidth;
+                        const h = Math.floor(photoMeta.height * (w / photoMeta.width));
+                        if (isVideo) {
+                            await generateVideoThumbnail(fileInfo.FullName, thumbPath, w, h);
+                        } else {
+                            await generateThumbnailBytes(fileInfo.FullName, w, h, thumbPath, 80, isHeic);
+                        }
                     }
+                    
+                    // Do same for medium size
+                    const mediumPath = path.join(thumbsDir, sub1, sub2, photoMeta.guid + '-medium.webp');
+                    const mediumFileExists = await fs.stat(mediumPath).then(() => true).catch(() => false);
+                    const mediumSizeWidthMin = Math.min(photoMeta.width, mediumSizeWidth); // Don't upscale beyond original width
+                    const mediumSizeHeight = Math.floor(photoMeta.height * (mediumSizeWidthMin / photoMeta.width));
+                    if (!mediumFileExists) {
+                        if (isVideo) {
+                            await generateVideoThumbnail(fileInfo.FullName, mediumPath, mediumSizeWidthMin, mediumSizeHeight, 1);
+                        } else {
+                            await generateThumbnailBytes(fileInfo.FullName, mediumSizeWidthMin, mediumSizeHeight, mediumPath, 99, isHeic);
+                        }
+                    }                    
                 }
                 
-                // Do same for medium size
-                const mediumPath = path.join(thumbsDir, sub1, sub2, photoMeta.guid + '-medium.webp');
-                const mediumFileExists = await fs.stat(mediumPath).then(() => true).catch(() => false);
-                const mediumSizeWidthMin = Math.min(photoMeta.width, mediumSizeWidth); // Don't upscale beyond original width
-                const mediumSizeHeight = Math.floor(photoMeta.height * (mediumSizeWidthMin / photoMeta.width));
-                if (!mediumFileExists) {
-                    if (isVideo) {
-                        await generateVideoThumbnail(fileInfo.FullName, mediumPath, mediumSizeWidthMin, mediumSizeHeight, 1);
-                    } else {
-                        await generateThumbnailBytes(fileInfo.FullName, mediumSizeWidthMin, mediumSizeHeight, mediumPath, 99, isHeic);
+                // Generate low-res loop clip for live photo videos
+                if (photoMeta.type === 'live-photo-video') {
+                    const sub1 = photoMeta.guid.substring(0, 2);
+                    const sub2 = photoMeta.guid.substring(2, 4);
+                    const loopClipPath = path.join(thumbsDir, sub1, sub2, photoMeta.guid + '_loop.mp4');
+                    const loopClipExists = await fs.stat(loopClipPath).then(() => true).catch(() => false);
+                    if (!loopClipExists) {
+                        await fs.mkdir(path.join(thumbsDir, sub1, sub2), { recursive: true });
+                        await generateVideoLoopClip(fileInfo.FullName, loopClipPath);
                     }
                 }
                 
@@ -209,11 +231,38 @@ async function loadPhotos() {
 }
 
 /// GET /api/metadata
-/// Returns essential metadata for all photos to display correctly 
-/// (and some non-essential nice-to-haves), sorted by dateTaken descending
+/// Returns all photo metadata with embedded favorites, trash, and URL fields,
+/// sorted by dateTaken descending
 export const GET: RequestHandler = async ({ url }) => {
     await loadPhotos();
     const photos: PhotoServerModel[] = memoryCache[photosMetaCacheKey] || [];
+
+    // Read favorites
+    let favoriteSet = new Set<string>();
+    try {
+        const favExists = await fs.stat(favoritesFilename).then(() => true).catch(() => false);
+        if (favExists) {
+            const favRaw = await fs.readFile(favoritesFilename, 'utf-8');
+            const favArray: string[] = JSON.parse(favRaw);
+            favoriteSet = new Set(favArray);
+        }
+    } catch {
+        // No favorites file yet, use empty set
+    }
+
+    // Read trash
+    let trashSet = new Set<string>();
+    try {
+        const trashExists = await fs.stat(trashFilename).then(() => true).catch(() => false);
+        if (trashExists) {
+            const trashRaw = await fs.readFile(trashFilename, 'utf-8');
+            const trashArray: string[] = JSON.parse(trashRaw);
+            trashSet = new Set(trashArray);
+        }
+    } catch {
+        // No trash file yet, use empty set
+    }
+
     const result: PhotoModel[] = photos.map(x => ({
         dateTaken: x.dateTaken,
         guid: x.guid,
@@ -222,7 +271,14 @@ export const GET: RequestHandler = async ({ url }) => {
         sizeKb: x.sizeKb,
         width: x.width,
         height: x.height,
-        lengthSeconds: x.lengthSeconds
+        lengthSeconds: x.lengthSeconds,
+        // thumb: `api/photos/${x.guid}/thumb`,
+        // medium: `api/photos/${x.guid}/medium`,
+        // full: `api/photos/${x.guid}`,
+        // video: `api/video/${x.guid}`,
+        isFavorite: favoriteSet.has(x.guid),
+        isTrash: trashSet.has(x.guid),
+        sidecarGuid: x.sidecarGuid
     }))
     .sort((a, b) => {
         // Push any "error-no-date-found" entries to the end

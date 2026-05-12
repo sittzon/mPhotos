@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy  } from "svelte";
-  import type { PhotoModelExtended }from "$api";
+  import type { PhotoModel }from "$api";
   import ThumbnailStrip from '$components/ThumbnailStrip.svelte';
   import { slide } from 'svelte/transition';
 
-  export let photos: Array<PhotoModelExtended> = [];
+  export let photos: Array<PhotoModel> = [];
   export let closeModal = () => {}; // Feedback close to parent
   export let photoIndex: number = 0; // Start index in photos array
   export let nrToPreload: number = 1; // Number of photos to preload on each side
@@ -113,7 +113,7 @@
     }
   }
   
-  const getDateFormattedLong = (photo: PhotoModelExtended) => {
+  const getDateFormattedLong = (photo: PhotoModel) => {
     if (photo == null || photo.dateTaken == null) {
       return "";
     }
@@ -344,10 +344,6 @@
         throw new Error("Failed to toggle favorite status");
       }
     })
-
-    // Dispatch update favorites event to parent
-    const event = new CustomEvent('updateFavorites');
-    dispatchEvent(event);
   }
 
   const setCurrentToTrash = async () => {
@@ -368,10 +364,6 @@
         throw new Error("Failed to toggle trash status");
       }
     })
-
-    // Dispatch update trash event to parent
-    const event = new CustomEvent('updateTrash');
-    dispatchEvent(event);
   }
 </script>
 
@@ -390,14 +382,14 @@
         {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'live-photo-video') && i === nrToPreload}
           <video width="100%" height="100%" controls autoplay>
             <source 
-              src={photo.video}
+              src={"api/video/"+photo.guid}
               type="video/mp4"
               />
             <track kind="captions" src="" srclang="en" label="English captions" default>
           </video>
         {:else}
           <img
-            src={photo.medium}
+            src={"api/photos/"+photo.guid+"/medium"}
             class="slide 
               {i === nrToPreload ? 'current' : i < nrToPreload ? 'previous' : 'next'} 
               {animating ? 'animating' : ''}

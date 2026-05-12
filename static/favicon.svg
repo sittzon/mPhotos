@@ -1,28 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Photo Album">
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="mPhotos">
   <defs>
     <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#FF8A00"/>
-      <stop offset="1" stop-color="#FF3D81"/>
+      <stop offset="0%" stop-color="#FF8A00"/>
+      <stop offset="100%" stop-color="#FF3D81"/>
     </linearGradient>
   </defs>
 
-  <!-- Rounded square background -->
-  <rect x="0" y="0" width="64" height="64" rx="12" ry="12" fill="url(#g)"/>
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#151515"/>
 
-  <!-- Photo card (white) -->
-  <g transform="translate(9,10)">
-    <rect width="46" height="34" rx="3" ry="3" fill="white" />
-    <!-- mountain silhouette -->
-    <path d="M4 28 L18 12 L26 22 L36 8 L42 28 Z" fill="#f2f2f2" />
-    <!-- sun / moon circle -->
-    <circle cx="34" cy="9" r="3.2" fill="#ffd76b"/>
-  </g>
-
-  <!-- Camera lens overlay -->
-  <g transform="translate(40,34)">
-    <circle cx="0" cy="0" r="9.5" fill="rgba(0,0,0,0.12)"/>
-    <circle cx="0" cy="0" r="6.0" fill="white"/>
-    <circle cx="0" cy="0" r="3.2" fill="#2b2b2b"/>
-  </g>
+  <rect x="5" y="5" width="25" height="25" rx="7" fill="none" stroke="#555" stroke-width="2.5"/>
+  <rect x="34" y="5" width="25" height="25" rx="7" fill="none" stroke="#555" stroke-width="2.5"/>
+  <rect x="5" y="34" width="25" height="25" rx="7" fill="none" stroke="#555" stroke-width="2.5"/>
+  <rect x="34" y="34" width="25" height="25" rx="7" fill="url(#g)"/>
 </svg>

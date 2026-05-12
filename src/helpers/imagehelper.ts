@@ -277,3 +277,30 @@ export async function generateVideoThumbnail(videoPath: string, outPath: string,
         });
     });
 }
+
+// Generate a low-res loop clip for grid display (360px wide, no audio)
+export async function generateVideoLoopClip(videoPath: string, outPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const ffmpeg = spawn('ffmpeg', [
+            '-i', videoPath,
+            '-vf', 'scale=240:-2',
+            '-c:v', 'libx264',
+            '-crf', '30',
+            '-preset', 'ultrafast',
+            '-an',
+            '-movflags', '+faststart',
+            outPath
+        ]);
+        ffmpeg.on('close', (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                console.log('Error generating loop clip, ffmpeg exited with code:', code);
+                reject(new Error('Failed to generate loop clip'));
+            }
+        });
+        ffmpeg.on('error', (err) => {
+            reject(err);
+        });
+    });
+}

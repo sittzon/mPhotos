@@ -2,7 +2,7 @@ import chokidar, { FSWatcher } from 'chokidar';
 import { env } from '$env/dynamic/private';
 import { memoryCache } from '$helpers/memorycache';
 import { photosMetaCacheKey } from '$helpers/filehelper';
-import { getFileContentHash, generateThumbnailBytes, generateVideoThumbnail, getImageDimensions, getVideoDimensions, getVideoDuration, getDateTakenFromPath, shutdownExifTool } from '$helpers/imagehelper';
+import { getFileContentHash, generateThumbnailBytes, generateVideoThumbnail, generateVideoLoopClip, getImageDimensions, getVideoDimensions, getVideoDuration, getDateTakenFromPath, shutdownExifTool } from '$helpers/imagehelper';
 import fs from 'fs/promises';
 import path from 'path';
 import type { PhotoServerModel, PhotoModel } from '$api';
@@ -32,9 +32,10 @@ function buildThumbnailPath(guid: string): { thumb: string; medium: string; dir:
 }
 
 async function cleanupThumbnails(guid: string) {
-    const { thumb, medium } = buildThumbnailPath(guid);
+    const { dir, thumb, medium } = buildThumbnailPath(guid);
     await fs.unlink(thumb).catch(() => { });
     await fs.unlink(medium).catch(() => { });
+    await fs.unlink(path.join(dir, guid + '_loop.mp4')).catch(() => { });
 }
 
 function countDuplicates(photoMetadata: PhotoServerModel[]): Map<string, number> {
@@ -133,6 +134,15 @@ async function generateThumbnails(photoMeta: PhotoServerModel) {
             await generateVideoThumbnail(photoMeta.location, medium, mediumSizeWidthMin, mediumSizeHeight, 1);
         } else {
             await generateThumbnailBytes(photoMeta.location, mediumSizeWidthMin, mediumSizeHeight, medium, 99, isHeic);
+        }
+    }
+
+    // Generate low-res loop clip for live photo videos
+    if (photoMeta.type === 'live-photo-video') {
+        const loopClipPath = path.join(dir, photoMeta.guid + '_loop.mp4');
+        const loopExists = await fs.stat(loopClipPath).then(() => true).catch(() => false);
+        if (!loopExists) {
+            await generateVideoLoopClip(photoMeta.location, loopClipPath);
         }
     }
 }

@@ -7,17 +7,11 @@ export interface PhotoModel {
   height: number;
   lengthSeconds: number | null;
   sizeKb: number;
+  isFavorite: boolean;
+  isTrash: boolean;
+  sidecarGuid: string | null;
 }
 
 export interface PhotoServerModel extends PhotoModel {
     location: string;
-}
-
-export interface PhotoModelExtended extends PhotoModel {
-    thumb: string;
-    medium: string;
-    full: string;
-    video: string;
-    isFavorite: boolean | null;
-    isTrash: boolean | null;
 }

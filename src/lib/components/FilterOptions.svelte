@@ -5,6 +5,7 @@
     export let isVideoFiltered: boolean = false;
     export let isFavoriteFiltered: boolean = false;
     export let isLivePhotoVideosFiltered: boolean = false;
+    export let isLivePhotosFiltered: boolean = false;
     export let isPhotosFiltered: boolean = false;
 
     let isModalOpen: boolean = false;
@@ -29,12 +30,17 @@
         dispatchEvent(new CustomEvent('toggleLivePhotoVideos'));
     }
 
+    const dispatchToggleLivePhotosEvent = () => {
+        dispatchEvent(new CustomEvent('toggleLivePhotos'));
+    }
+
     $: options = [
-        {id: 0, displayName: 'Show all', val: isShowingAll, func: () => {dispatchShowAllEvent()}, icon: 'aspect-ratio', disabled: !isVideoFiltered && !isFavoriteFiltered && !isPhotosFiltered && !isLivePhotoVideosFiltered},
+        {id: 0, displayName: 'Show all', val: isShowingAll, func: () => {dispatchShowAllEvent()}, icon: 'aspect-ratio', disabled: !isVideoFiltered && !isFavoriteFiltered && !isPhotosFiltered && !isLivePhotoVideosFiltered && !isLivePhotosFiltered},
         {id: 1, displayName: 'Photos', val: isPhotosFiltered, func: () => {dispatchTogglePhotosEvent()}, icon: 'photo'},
-        {id: 2, displayName: 'Videos', val: isVideoFiltered, func: () => {dispatchToggleVideosEvent()}, icon: 'video'},
-        {id: 3, displayName: 'Favorites', val: isFavoriteFiltered, func: () => {dispatchToggleFavoritesEvent()}, icon: 'favorite-checked'},
+        {id: 2, displayName: 'Live Photos', val: isLivePhotosFiltered, func: () => {dispatchToggleLivePhotosEvent()}, icon: 'aspect-ratio'},
+        {id: 3, displayName: 'Videos', val: isVideoFiltered, func: () => {dispatchToggleVideosEvent()}, icon: 'video'},
         {id: 4, displayName: 'Live Photo Videos', val: isLivePhotoVideosFiltered, func: () => {dispatchToggleLivePhotoVideosEvent()}, icon: 'live-photo-video'},
+        {id: 5, displayName: 'Favorites', val: isFavoriteFiltered, func: () => {dispatchToggleFavoritesEvent()}, icon: 'favorite-checked'},
     ]
 
     onMount(() => {
@@ -65,7 +71,7 @@
     #filter-options {
         cursor: pointer;
         font-size: 16px;
-        top: 240px;
+        top: 260px;
         right: 10px;
         position: fixed;
         align-items: center;

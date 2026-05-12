@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
 	import { writable } from 'svelte/store';
-    import type { PhotoModel, PhotoModelExtended } from "$api";
+    import type { PhotoModel } from "$api";
 	import VirtualList from 'svelte-tiny-virtual-list';
 	import ItemsUpdatedEvent from 'svelte-tiny-virtual-list';
     import PhotoSlider from '$components/PhotoSlider.svelte';
@@ -10,15 +10,12 @@
 
     let virtualList: VirtualList;
     
-    let originalPhotosMetadataExtended : Array<PhotoModelExtended> = [];
-    let filteredPhotosMetadata : Array<PhotoModelExtended> = [];
-    $: photosAndVideosMetadata = originalPhotosMetadataExtended.filter((photo: PhotoModelExtended) => photo.type != 'live-photo-video');
-    
-    let favorites: Array<string> = [];
-    let trash: Array<string> = [];
+    let originalPhotosMetadata : Array<PhotoModel> = [];
+    let filteredPhotosMetadata : Array<PhotoModel> = [];
+    $: photosAndVideosMetadata = originalPhotosMetadata.filter((photo: PhotoModel) => photo.type != 'live-photo-video');
     
     // The actual array of photos used in the virtual list, divided into chunks/rows for display
-    let chunkedPhotos : Array<Array<PhotoModelExtended>> = [];
+    let chunkedPhotos : Array<Array<PhotoModel>> = [];
     let chunkSize: number =  5;
     let maxChunkSize: number = 12; // Varies based on window width
     const minChunkSize: number = 3; // No less than 3 columns
@@ -26,6 +23,9 @@
     let datepickerIndex: number = 0;
     let currentPhotoIndex: number = 0;
     let rowHeights: Array<number> = [];
+
+    let currentStartPhotoIndex: number = 0;
+    let currentEndPhotoIndex: number = 0;
     
     let windowHeight: number = 1000;
     let scrollToIndex: number | undefined = undefined;
@@ -33,12 +33,17 @@
     let isFingerDown: boolean = false;
     
     let isPhotoModalOpen: boolean = false;
+    let isScrolling: boolean = false;
+    let activeVideoGuids: string[] = [];
+    let scrollDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let showSquareThumbs: boolean = false; // false = original aspect ratio, true = square
     let filterAll: boolean = true;
     let filterVideos: boolean = false;
     let filterPhotos: boolean = false;
     let filterFavorites: boolean = false;
     let filterLivePhotoVideos: boolean = false;
+    let filterLivePhotos: boolean = false;
+    let playLivePhotos: boolean = false;
     let filterTrash: boolean = false;
 
     let libraryHighlighted: boolean = true;
@@ -60,6 +65,8 @@
         const tempFilterVideos = getCookie('mphotos-filterVideos');
         const tempFilterFavorites = getCookie('mphotos-filterFavorites');
         const tempFilterLivePhotoVideos = getCookie('mphotos-filterLivePhotoVideos');
+        const tempFilterLivePhotos = getCookie('mphotos-filterLivePhotos');
+        const tempPlayLivePhotos = getCookie('mphotos-playLivePhotos');
         const tempSquareProportions = getCookie('mphotos-squareProportions');
         const tempScrollToIndex = getCookie('mphotos-scrollToIndex');
         chunkSize = tempChunkSize? +tempChunkSize : chunkSize;
@@ -67,10 +74,12 @@
         filterVideos = tempFilterVideos === 'true' ? true : false;
         filterFavorites = tempFilterFavorites === 'true' ? true : false;
         filterLivePhotoVideos = tempFilterLivePhotoVideos === 'true' ? true : false;
-        filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterPhotos);
+        filterLivePhotos = tempFilterLivePhotos === 'true' ? true : false;
+        playLivePhotos = tempPlayLivePhotos === 'true' ? true : false;
+        filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
         showSquareThumbs = tempSquareProportions === 'true' ? true : false;
 
-        // Fetch metadata        
+        // Fetch metadata (includes favorites + trash flags + URL fields)
         await fetch("/api/metadata", {
             method: 'GET',
             headers: {
@@ -86,52 +95,15 @@
             }
         })
         .then((data) => {
-            // Map to PhotoModelExtended
-            originalPhotosMetadataExtended = data.map((photo: PhotoModel) => ({
-                ...photo,
-                thumb: `api/photos/${photo.guid}/thumb`,
-                medium: `api/photos/${photo.guid}/medium`,
-                full: `api/photos/${photo.guid}`,
-                video: `api/video/${photo.guid}`,
-                isFavorite: false
-            }));
-            
-            // Originally filter out live-photo-videos 
-            photosAndVideosMetadata = originalPhotosMetadataExtended;
-                // .filter((photo: PhotoModelExtended) => photo.type == 'photo' || photo.type == 'video');
-                
+            originalPhotosMetadata = data;
+            photosAndVideosMetadata = originalPhotosMetadata;
             filterPhotosArray();
-                
-            // filteredPhotosMetadata = originalPhotosMetadataExtended.filter((photo: PhotoModelExtended) => !photo.isTrash);
-            // if (filterPhotos && filterVideos) {
-            //     filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'photo' || photo.type == 'video');
-            // }
-            // else if (filterPhotos) {
-            //     filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'photo');
-            // }
-            // else if (filterVideos) {
-            //     filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'video');
-            // }
-            // if (filterFavorites) {
-            //     filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => favorites.includes(photo.guid));
-            // }
-            // if (filterLivePhotoVideos) {
-            //     filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'live-photo-video');
-            // }
             if (filteredPhotosMetadata.length > 0) {
-                // setChunkedPhotos();
-                // Set scroll position after element is rendered
                 setTimeout(() => {
                     scrollToIndex = tempScrollToIndex ? +tempScrollToIndex : -1;
                 }, 10);
             }
         });
-
-        // Fetch favorits
-        updateFavorites();
-
-        // Update trash
-        updateTrash();
 
         // Add event listeners
         window.addEventListener("orientationchange", () => calcRowHeights(showSquareThumbs));
@@ -140,7 +112,6 @@
         window.addEventListener("touchstart", handleTouchStart);
         window.addEventListener("touchend", handleTouchEnd);
         window.addEventListener("touchcancel", handleTouchEnd);
-        window.addEventListener("updateFavorites", () => updateFavorites());
         window.addEventListener("keyup", keyPressUp);
         
         // Events from FilterOptions
@@ -149,33 +120,39 @@
             filterFavorites = filterAll? false : filterFavorites;
             filterVideos = filterAll? false : filterVideos;
             filterLivePhotoVideos = filterAll? false : filterLivePhotoVideos;
+            filterLivePhotos = filterAll? false : filterLivePhotos;
             filterPhotos = filterAll? false : filterPhotos;
             setCookie('mphotos-filterPhotos', filterPhotos.toString());
             setCookie('mphotos-filterVideos', filterVideos.toString());
             setCookie('mphotos-filterFavorites', filterFavorites.toString());
             setCookie('mphotos-filterLivePhotoVideos', filterLivePhotoVideos.toString());
+            setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
             filterPhotosArray()});
         window.addEventListener("toggleVideos", () => {
             filterVideos = !filterVideos; 
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterVideos', filterVideos.toString());
             filterPhotosArray()});
         window.addEventListener("togglePhotos", () => {
             filterPhotos = !filterPhotos; 
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterPhotos', filterPhotos.toString());
             filterPhotosArray()});
         window.addEventListener("toggleFavorites", () => {
             filterFavorites = !filterFavorites; 
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterFavorites', filterFavorites.toString());
             filterPhotosArray()});
         window.addEventListener("toggleLivePhotoVideos", () => {
             filterLivePhotoVideos = !filterLivePhotoVideos;
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterLivePhotoVideos', filterLivePhotoVideos.toString());
             filterPhotosArray()});
-            
+        window.addEventListener("toggleLivePhotos", () => {
+            filterLivePhotos = !filterLivePhotos;
+            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
+            setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
+            filterPhotosArray()});
 
         // Show elements again immediately on user action
         ['click', 'touchstart', 'mousemove'].forEach(event => {
@@ -199,70 +176,6 @@
         if (key.key === 'Escape') {
             handleCloseAllModals();
         }
-    }
-
-    const updateFavorites = async () => {
-        // Fetch favorites
-        await fetch("/api/favorites", {
-            method: 'GET',
-            headers: {
-                'content-type': 'application/json'
-            }
-        })
-        .then((response) => {
-            if (response.ok) {
-                return response.json();
-            } else {
-                // No favorites found, thats fine
-                return [];
-            }
-        })
-        .then((data) => {
-            favorites = data;
-            favorites.forEach(guid => {
-                const photo = originalPhotosMetadataExtended.find(photo => photo.guid === guid);
-                if (photo) {
-                    photo.isFavorite = true;
-                }
-            });
-        });
-
-        // Also update isFavorite flag in currently displayed photos
-        filteredPhotosMetadata.forEach(photo => {
-            photo.isFavorite = favorites.includes(photo.guid);
-        });
-    }
-
-    const updateTrash = async () => {
-        // Fetch trash
-        await fetch("/api/trash", {
-            method: 'GET',
-            headers: {
-                'content-type': 'application/json'
-            }
-        })
-        .then((response) => {
-            if (response.ok) {
-                return response.json();
-            } else {
-                // No trash items found, thats fine
-                return [];
-            }
-        })
-        .then((data) => {
-            trash = data;
-            trash.forEach(guid => {
-                const photo = originalPhotosMetadataExtended.find(photo => photo.guid === guid);
-                if (photo) {
-                    photo.isTrash = true;
-                }
-            });
-        });
-
-        // Also update isTrash flag in currently displayed photos
-        filteredPhotosMetadata.forEach(photo => {
-            photo.isTrash = trash.includes(photo.guid);
-        });
     }
 
     const getCookie = (name: string) => {
@@ -299,6 +212,8 @@
     const setChunkedPhotos = () => {
         chunkedPhotos = chunkArray(filteredPhotosMetadata, chunkSize);
         calcRowHeights(showSquareThumbs);
+        activeVideoGuids = [];
+        cancelScrollDebounce();
     }
 
     // Update max chunk size based on window width
@@ -366,7 +281,7 @@
     }
 
     // Opens photo modal
-    const openModal = (photo: PhotoModelExtended, index: number) => {
+    const openModal = (photo: PhotoModel, index: number) => {
         console.log("Opening photo modal for index:", index);
         currentPhotoIndex = index;
         isPhotoModalOpen = true;
@@ -400,9 +315,38 @@
         }
     }
 
+    function cancelScrollDebounce() {
+        if (scrollDebounceTimer) clearTimeout(scrollDebounceTimer);
+        scrollDebounceTimer = null;
+    }
+
+    onDestroy(() => cancelScrollDebounce());
+
+    function onScrollSettled(start: number, end: number) {
+        isScrolling = false;
+        const visible: string[] = [];
+        for (let i = start; i < end; i++) {
+            const row = chunkedPhotos[i];
+            if (row) {
+                for (const photo of row) {
+                    if (photo.sidecarGuid) visible.push(photo.guid);
+                }
+            }
+        }
+        activeVideoGuids = visible;
+    }
+
     // Handles list item updates (for scroll position, setting datepicker index)
     const handleListItemUpdate = (e: ItemsUpdatedEvent) => {
         const { start, end } = e.detail;
+        currentStartPhotoIndex = start;
+        currentEndPhotoIndex = end;
+
+        isScrolling = true;
+        activeVideoGuids = [];
+        cancelScrollDebounce();
+        scrollDebounceTimer = setTimeout(() => onScrollSettled(start, end), 100);
+
         const middlePhotoRow = start + Math.floor((end - start) / 2);
         const photoIndex = middlePhotoRow * chunkSize;
         datepickerIndex = photoIndex;
@@ -423,28 +367,31 @@
     // Set filteredPhotosMetadata according to filter options
     const filterPhotosArray = () => {
         if (filterTrash) {
-            filteredPhotosMetadata = originalPhotosMetadataExtended.filter((photo: PhotoModelExtended) => photo.isTrash);
+            filteredPhotosMetadata = originalPhotosMetadata.filter((photo: PhotoModel) => photo.isTrash);
         } else {
-            filteredPhotosMetadata = originalPhotosMetadataExtended.filter((photo: PhotoModelExtended) => !photo.isTrash);
+            filteredPhotosMetadata = originalPhotosMetadata.filter((photo: PhotoModel) => !photo.isTrash);
         }
         
         if (!filterAll) {
-            if (filterPhotos && filterVideos) {
-                filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'photo' || photo.type == 'video');
-            }
-            else if (filterPhotos) {
-                filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'photo');
-            }
-            else if (filterVideos) {
-                filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'video');
+            // typePredicates combines on an OR basis
+            const typePredicates: Array<(p: PhotoModel) => boolean> = [];
+            if (filterPhotos) typePredicates.push((p) => p.type === 'photo' && p.sidecarGuid == null);
+            if (filterVideos) typePredicates.push((p) => p.type === 'video');
+            if (filterLivePhotos) typePredicates.push((p) => p.sidecarGuid != null); 
+
+            if (typePredicates.length > 0) {
+                filteredPhotosMetadata = filteredPhotosMetadata.filter(
+                    (p) => typePredicates.some((fn) => fn(p))
+                );
             }
 
-            if (filterFavorites) {
-                filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => favorites.includes(photo.guid));
+            // All else is on AND basis
+            if (filterLivePhotoVideos) 
+            {
+                filteredPhotosMetadata = filteredPhotosMetadata.filter((p) => p.type === 'live-photo-video');
             }
-            if (filterLivePhotoVideos) {
-                
-                filteredPhotosMetadata = filteredPhotosMetadata.filter((photo: PhotoModelExtended) => photo.type == 'live-photo-video');
+            if (filterFavorites) {
+                filteredPhotosMetadata = filteredPhotosMetadata.filter((p) => p.isFavorite);
             }
         }
         if (filteredPhotosMetadata.length > 0) {
@@ -454,17 +401,31 @@
         }
     }
 
-    const setFilters = (photos: boolean, videos: boolean, favorites: boolean, livePhotoVideos: boolean, trash: boolean) => {
+    const setFilters = (photos: boolean, videos: boolean, favorites: boolean, livePhotoVideos: boolean, livePhotos: boolean, trash: boolean) => {
         filterPhotos = photos;
         filterVideos = videos;
         filterFavorites = favorites;
         filterLivePhotoVideos = livePhotoVideos;
+        filterLivePhotos = livePhotos;
         filterTrash = trash;
-        filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterPhotos);
+        filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
         setCookie('mphotos-filterPhotos', filterPhotos.toString());
         setCookie('mphotos-filterVideos', filterVideos.toString());
         setCookie('mphotos-filterFavorites', filterFavorites.toString());
         setCookie('mphotos-filterLivePhotoVideos', filterLivePhotoVideos.toString());
+        setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
+    }
+
+    const togglePlayLivePhotos = () => {
+        playLivePhotos = !playLivePhotos;
+        if (!playLivePhotos) {
+            activeVideoGuids = [];
+        }
+        else if (playLivePhotos && activeVideoGuids.length == 0)
+        {
+            onScrollSettled(currentStartPhotoIndex, currentEndPhotoIndex);
+        }
+        setCookie('mphotos-playLivePhotos', playLivePhotos.toString());
     }
 </script>
 
@@ -498,6 +459,11 @@
     arePhotosSquare={showSquareThumbs}
     isLivePhotoVideosFiltered={filterLivePhotoVideos}
     isPhotosFiltered={filterPhotos}
+    isLivePhotosFiltered={filterLivePhotos}
+    playLivePhotos={playLivePhotos}
+    togglePlayLivePhotosCallback={() => {
+        togglePlayLivePhotos();
+    }}
 />
 <DatePicker 
     photos={filteredPhotosMetadata} 
@@ -538,14 +504,22 @@
                             <td style="">
                                 <a on:click={() => openModal(currentPhotoMeta, index*chunkSize + itemIndex)} href='/'>
                                     <div style="position: relative; display: inline-block;">
-                                        <img 
-                                        id={currentPhotoMeta.guid}
-                                        src="api/photos/{currentPhotoMeta.guid}/thumb"
-                                        alt={currentPhotoMeta.dateTaken}
-                                        class:square-thumb={showSquareThumbs}
-                                        style="--row-height: {rowHeights[index]-2}px;"
-
-                                        >
+                                        {#if playLivePhotos && currentPhotoMeta.sidecarGuid && !isScrolling && activeVideoGuids.includes(currentPhotoMeta.guid)}
+                                            <video 
+                                            muted autoplay loop playsinline preload="none"
+                                            src="api/video/{currentPhotoMeta.sidecarGuid}/loop"
+                                            class:square-thumb={showSquareThumbs}
+                                            style="--row-height: {rowHeights[index]-2}px; background: url('api/photos/{currentPhotoMeta.guid}/thumb') center/contain no-repeat;"
+                                            />
+                                        {:else}
+                                            <img 
+                                            id={currentPhotoMeta.guid}
+                                            src="api/photos/{currentPhotoMeta.guid}/thumb"
+                                            alt={currentPhotoMeta.dateTaken}
+                                            class:square-thumb={showSquareThumbs}
+                                            style="--row-height: {rowHeights[index]-2}px;"
+                                            >
+                                        {/if}
                                         {#if currentPhotoMeta.type === 'video' || currentPhotoMeta.type === 'live-photo-video'}
                                             {#if currentPhotoMeta.lengthSeconds}
                                             <span class="video-duration-overlay">
@@ -553,7 +527,7 @@
                                             </span>
                                             {/if}
                                         {/if}
-                                        {#if favorites.includes(currentPhotoMeta.guid)}
+                                        {#if currentPhotoMeta.isFavorite}
                                             <span class="video-duration-overlay favorite-icon">
                                             </span>
                                         {/if}
@@ -579,7 +553,7 @@
                     libraryHighlighted = true;
                     favoritesHighlighted = false;
                     trashHighlighted = false;
-                    setFilters(true, true, false, false, false);
+                    setFilters(true, true, false, false, false, false);
                     filterPhotosArray(); }} 
                     aria-label="Show all photos and videos">
             </button>
@@ -590,7 +564,7 @@
                     libraryHighlighted = false;
                     favoritesHighlighted = true;
                     trashHighlighted = false;
-                    setFilters(true, true, true, false, false);
+                    setFilters(true, true, true, false, false, false);
                     filterPhotosArray(); }}
                     aria-label="Show favorite photos and videos">
             </button>
@@ -601,7 +575,7 @@
                     libraryHighlighted = false;
                     favoritesHighlighted = false;
                     trashHighlighted = true;
-                    setFilters(false, false, false, false, true);
+                    setFilters(false, false, false, false, false, true);
                     filterPhotosArray(); 
                     }}
                     aria-label="Show photos in trash, to be deleted">
@@ -660,9 +634,24 @@
         max-height: var(--row-height);
         border-radius: 5px;
         max-width: 100%;
+        vertical-align: top;
     }
     
     td a img.square-thumb {
+        object-fit: cover;
+        width: var(--row-height);
+        height: var(--row-height);
+    }
+
+    td a video {
+        max-height: var(--row-height);
+        border-radius: 5px;
+        max-width: 100%;
+        vertical-align: top;
+        object-fit: contain;
+    }
+
+    td a video.square-thumb {
         object-fit: cover;
         width: var(--row-height);
         height: var(--row-height);

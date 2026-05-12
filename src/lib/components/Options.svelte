@@ -1,23 +1,26 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { PhotoModel, PhotoModelExtended } from "$api";
+    import type { PhotoModel } from "$api";
     import FilterOptions from './FilterOptions.svelte';
     import { cubicOut } from 'svelte/easing';
 
-    export let photos: Array<PhotoModelExtended> = [];
+    export let photos: Array<PhotoModel> = [];
     export let currentChunkSize: number = 5;
     export let minChunkSize: number = 3;
     export let maxChunkSize: number = 12;
-    export let sortedPhotosCallback: (photos: PhotoModelExtended[]) => void = () => {};
+    export let sortedPhotosCallback: (photos: PhotoModel[]) => void = () => {};
     export let zoomInCallback: () => void = () => {};
     export let zoomOutCallback: () => void = () => {};
     export let toggleSquareProportionsCallback: () => void = () => {};
+    export let playLivePhotos: boolean = true;
+    export let togglePlayLivePhotosCallback: () => void = () => {};
     export let isVideoFiltered: boolean = false;
     export let isFavoriteFiltered: boolean = false;
     export let isShowingAll: boolean = false;
     export let closeFromParent: boolean = false;
     export let arePhotosSquare: boolean = false;
     export let isLivePhotoVideosFiltered: boolean = false;
+    export let isLivePhotosFiltered: boolean = false;
     export let isPhotosFiltered: boolean = false;
 
     let isFilterOptionsOpen: boolean = false;
@@ -52,6 +55,7 @@
         {id: 2, displayName: 'Newest first', func: () => {sort(true)}, icon: 'sort-latest', disabled: isSortedByLatest},
         {id: 3, displayName: 'Oldest first', func: () => {sort(false)}, icon: 'sort-earliest', disabled: !isSortedByLatest},
         {id: 5, displayName: arePhotosSquare? 'Maintain proportions' : 'Square proportions', func: () => {toggleSquareProportionsCallback()}, icon: 'aspect-ratio'},
+        {id: 7, displayName: playLivePhotos ? 'Disable Auto-play' : 'Enable Auto-play', func: () => {togglePlayLivePhotosCallback()}, icon: playLivePhotos ? 'video' : 'video-off'},
         {id: 6, displayName: 'Filter', func: () => {toggleOpenFilterOptions()}, icon: 'aspect-ratio'},
     ]
 
@@ -154,6 +158,7 @@
             isFavoriteFiltered={isFavoriteFiltered}
             isShowingAll={isShowingAll}
             isLivePhotoVideosFiltered={isLivePhotoVideosFiltered}
+            isLivePhotosFiltered={isLivePhotosFiltered}
             isPhotosFiltered={isPhotosFiltered}
         />
     </div>
