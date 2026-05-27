@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { spawn } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs/promises';
+import path from 'path';
 import heicConvert from "heic-convert";
 import { ExifTool } from "exiftool-vendored";
 import os from "os";
@@ -250,29 +251,45 @@ export async function generateThumbnailBytes(imagePath: string, w: number, h: nu
 
 // Generate a thumbnail from a video file using ffmpeg
 export async function generateVideoThumbnail(videoPath: string, outPath: string, w: number, h: number, timeSeconds = 1): Promise<void> {
-    return new Promise((resolve, reject) => {
-        // Extract frame, resize, encode as webp
+    const duration = await getVideoDuration(videoPath);
+    timeSeconds = Math.min(timeSeconds, Math.max(0, duration - 0.5));
+
+    const tmpFile = path.join(os.tmpdir(), `${crypto.randomUUID()}.png`);
+
+    await new Promise<void>((resolve, reject) => {
         const ffmpeg = spawn('ffmpeg', [
-            '-ss', String(timeSeconds), // seek to time
+            '-ss', String(timeSeconds),
             '-i', videoPath,
-            '-frames:v', '1', // extract one frame
-            '-vf', `scale='min(${w},iw)':'min(${h},ih)':force_original_aspect_ratio=decrease`,
-            '-c:v', 'libwebp', // use webp encoder
-            '-quality', '90', // webp quality (0-100)
-            '-lossless', '0', // lossy for better compression
-            '-preset', 'picture', // better quality for still images
-            '-pix_fmt', 'yuv420p', // color compatibility
-            outPath
+            '-frames:v', '1',
+            tmpFile
         ]);
-        ffmpeg.on('close', (code) => {
+
+        ffmpeg.on('close', async (code) => {
             if (code === 0) {
-                resolve();
+                try {
+                    const exists = await fs.stat(tmpFile).then(() => true).catch(() => false);
+                    if (!exists) {
+                        reject(new Error('ffmpeg exited 0 but no frame was produced'));
+                        return;
+                    }
+                    await sharp(tmpFile)
+                        .resize(w, h, { fit: 'inside' })
+                        .webp({ quality: 90 })
+                        .toFile(outPath);
+                    await fs.unlink(tmpFile);
+                    resolve();
+                } catch (err) {
+                    await fs.unlink(tmpFile).catch(() => {});
+                    reject(err);
+                }
             } else {
-                console.log('Error generating video thumbnail, ffmpeg exited with code: ', code);
-                reject(new Error('Failed to generate video thumbnail'));
+                await fs.unlink(tmpFile).catch(() => {});
+                reject(new Error(`ffmpeg exited with code ${code}`));
             }
         });
-        ffmpeg.on('error', (err) => {
+
+        ffmpeg.on('error', async (err) => {
+            await fs.unlink(tmpFile).catch(() => {});
             reject(err);
         });
     });

@@ -4,7 +4,7 @@
     export let isShowingAll: boolean = false;
     export let isVideoFiltered: boolean = false;
     export let isFavoriteFiltered: boolean = false;
-    export let isLivePhotoVideosFiltered: boolean = false;
+    export let isShortVideosFiltered: boolean = false;
     export let isLivePhotosFiltered: boolean = false;
     export let isPhotosFiltered: boolean = false;
 
@@ -26,8 +26,8 @@
         dispatchEvent(new CustomEvent('toggleFavorites'));
     }
 
-    const dispatchToggleLivePhotoVideosEvent = () => {
-        dispatchEvent(new CustomEvent('toggleLivePhotoVideos'));
+    const dispatchToggleShortVideosEvent = () => {
+        dispatchEvent(new CustomEvent('toggleShortVideos'));
     }
 
     const dispatchToggleLivePhotosEvent = () => {
@@ -35,11 +35,11 @@
     }
 
     $: options = [
-        {id: 0, displayName: 'Show all', val: isShowingAll, func: () => {dispatchShowAllEvent()}, icon: 'aspect-ratio', disabled: !isVideoFiltered && !isFavoriteFiltered && !isPhotosFiltered && !isLivePhotoVideosFiltered && !isLivePhotosFiltered},
+        {id: 0, displayName: 'Show all', val: isShowingAll, func: () => {dispatchShowAllEvent()}, icon: 'aspect-ratio', disabled: !isVideoFiltered && !isFavoriteFiltered && !isPhotosFiltered && !isShortVideosFiltered && !isLivePhotosFiltered},
         {id: 1, displayName: 'Photos', val: isPhotosFiltered, func: () => {dispatchTogglePhotosEvent()}, icon: 'photo'},
         {id: 2, displayName: 'Live Photos', val: isLivePhotosFiltered, func: () => {dispatchToggleLivePhotosEvent()}, icon: 'aspect-ratio'},
         {id: 3, displayName: 'Videos', val: isVideoFiltered, func: () => {dispatchToggleVideosEvent()}, icon: 'video'},
-        {id: 4, displayName: 'Live Photo Videos', val: isLivePhotoVideosFiltered, func: () => {dispatchToggleLivePhotoVideosEvent()}, icon: 'live-photo-video'},
+        {id: 4, displayName: 'Short Videos', val: isShortVideosFiltered, func: () => {dispatchToggleShortVideosEvent()}, icon: 'short-video'},
         {id: 5, displayName: 'Favorites', val: isFavoriteFiltered, func: () => {dispatchToggleFavoritesEvent()}, icon: 'favorite-checked'},
     ]
 

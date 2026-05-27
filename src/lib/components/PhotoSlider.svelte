@@ -379,7 +379,7 @@
   {/if}
     <div class="slideshow" style="opacity:{slideshowOpacity};">
       {#each preloadPhotos as photo, i}
-        {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'live-photo-video') && i === nrToPreload}
+        {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'short-video') && i === nrToPreload}
           <video width="100%" height="100%" controls autoplay>
             <source 
               src={"api/video/"+photo.guid}
@@ -397,7 +397,7 @@
             alt={photo.dateTaken}
             style="transform: {transforms[i]};"
           />
-          {#if (photo.type === 'video' || photo.type === 'live-photo-video') && !isVideoPlaying && i === nrToPreload}
+          {#if (photo.type === 'video' || photo.type === 'short-video') && !isVideoPlaying && i === nrToPreload}
             <div class="play-icon-container">
               <button 
               class="play-icon {animating ? 'animating' : ''}" 

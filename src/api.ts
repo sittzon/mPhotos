@@ -2,7 +2,7 @@ export interface PhotoModel {
   dateTaken: string;
   guid: string;
   name: string;
-  type: 'photo' | 'video' | 'live-photo-video';
+  type: 'photo' | 'video' | 'short-video' | 'live-photo-video';
   width: number;
   height: number;
   lengthSeconds: number | null;
@@ -10,6 +10,7 @@ export interface PhotoModel {
   isFavorite: boolean;
   isTrash: boolean;
   sidecarGuid: string | null;
+  referenceGuid: string | null;
 }
 
 export interface PhotoServerModel extends PhotoModel {

@@ -19,7 +19,7 @@
     export let isShowingAll: boolean = false;
     export let closeFromParent: boolean = false;
     export let arePhotosSquare: boolean = false;
-    export let isLivePhotoVideosFiltered: boolean = false;
+    export let isShortVideosFiltered: boolean = false;
     export let isLivePhotosFiltered: boolean = false;
     export let isPhotosFiltered: boolean = false;
 
@@ -157,7 +157,7 @@
             isVideoFiltered={isVideoFiltered}
             isFavoriteFiltered={isFavoriteFiltered}
             isShowingAll={isShowingAll}
-            isLivePhotoVideosFiltered={isLivePhotoVideosFiltered}
+            isShortVideosFiltered={isShortVideosFiltered}
             isLivePhotosFiltered={isLivePhotosFiltered}
             isPhotosFiltered={isPhotosFiltered}
         />

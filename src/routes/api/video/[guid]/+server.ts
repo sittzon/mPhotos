@@ -60,7 +60,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
             "Content-Type": mimeType,
         };
 
-        console.log("Serving streaming video:", guid, `bytes ${start}-${end}/${fileSize}`);
+        console.log("Streaming video:", guid, `bytes ${start}-${end}/${fileSize}`);
 
         return new Response(nodeStreamToWeb(fileStream), { status: 206, headers });
     }

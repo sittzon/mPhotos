@@ -12,7 +12,6 @@
     
     let originalPhotosMetadata : Array<PhotoModel> = [];
     let filteredPhotosMetadata : Array<PhotoModel> = [];
-    $: photosAndVideosMetadata = originalPhotosMetadata.filter((photo: PhotoModel) => photo.type != 'live-photo-video');
     
     // The actual array of photos used in the virtual list, divided into chunks/rows for display
     let chunkedPhotos : Array<Array<PhotoModel>> = [];
@@ -34,17 +33,21 @@
     
     let isPhotoModalOpen: boolean = false;
     let isScrolling: boolean = false;
-    let activeVideoGuids: string[] = [];
+    let activePlayingVideoGuids: string[] = [];
     let scrollDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let showSquareThumbs: boolean = false; // false = original aspect ratio, true = square
     let filterAll: boolean = true;
     let filterVideos: boolean = false;
     let filterPhotos: boolean = false;
     let filterFavorites: boolean = false;
-    let filterLivePhotoVideos: boolean = false;
+    let filterShortVideos: boolean = false;
     let filterLivePhotos: boolean = false;
-    let playLivePhotos: boolean = false;
     let filterTrash: boolean = false;
+    
+    let prevAutoPlayStatus: boolean = false;
+    let playLivePhotos: boolean = false;
+
+    let allVideosPaused: boolean = false;
 
     let libraryHighlighted: boolean = true;
     let favoritesHighlighted: boolean = false;
@@ -64,7 +67,7 @@
         const tempFilterPhotos = getCookie('mphotos-filterPhotos');
         const tempFilterVideos = getCookie('mphotos-filterVideos');
         const tempFilterFavorites = getCookie('mphotos-filterFavorites');
-        const tempFilterLivePhotoVideos = getCookie('mphotos-filterLivePhotoVideos');
+        const tempFilterShortVideos = getCookie('mphotos-filterShortVideos');
         const tempFilterLivePhotos = getCookie('mphotos-filterLivePhotos');
         const tempPlayLivePhotos = getCookie('mphotos-playLivePhotos');
         const tempSquareProportions = getCookie('mphotos-squareProportions');
@@ -73,10 +76,10 @@
         filterPhotos = tempFilterPhotos === 'true' ? true : false;
         filterVideos = tempFilterVideos === 'true' ? true : false;
         filterFavorites = tempFilterFavorites === 'true' ? true : false;
-        filterLivePhotoVideos = tempFilterLivePhotoVideos === 'true' ? true : false;
+        filterShortVideos = tempFilterShortVideos === 'true' ? true : false;
         filterLivePhotos = tempFilterLivePhotos === 'true' ? true : false;
         playLivePhotos = tempPlayLivePhotos === 'true' ? true : false;
-        filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
+        filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
         showSquareThumbs = tempSquareProportions === 'true' ? true : false;
 
         // Fetch metadata (includes favorites + trash flags + URL fields)
@@ -96,7 +99,6 @@
         })
         .then((data) => {
             originalPhotosMetadata = data;
-            photosAndVideosMetadata = originalPhotosMetadata;
             filterPhotosArray();
             if (filteredPhotosMetadata.length > 0) {
                 setTimeout(() => {
@@ -119,38 +121,38 @@
             filterAll = !filterAll; 
             filterFavorites = filterAll? false : filterFavorites;
             filterVideos = filterAll? false : filterVideos;
-            filterLivePhotoVideos = filterAll? false : filterLivePhotoVideos;
+            filterShortVideos = filterAll? false : filterShortVideos;
             filterLivePhotos = filterAll? false : filterLivePhotos;
             filterPhotos = filterAll? false : filterPhotos;
             setCookie('mphotos-filterPhotos', filterPhotos.toString());
             setCookie('mphotos-filterVideos', filterVideos.toString());
             setCookie('mphotos-filterFavorites', filterFavorites.toString());
-            setCookie('mphotos-filterLivePhotoVideos', filterLivePhotoVideos.toString());
+            setCookie('mphotos-filterShortVideos', filterShortVideos.toString());
             setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
             filterPhotosArray()});
         window.addEventListener("toggleVideos", () => {
             filterVideos = !filterVideos; 
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterVideos', filterVideos.toString());
             filterPhotosArray()});
         window.addEventListener("togglePhotos", () => {
             filterPhotos = !filterPhotos; 
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterPhotos', filterPhotos.toString());
             filterPhotosArray()});
         window.addEventListener("toggleFavorites", () => {
             filterFavorites = !filterFavorites; 
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterFavorites', filterFavorites.toString());
             filterPhotosArray()});
-        window.addEventListener("toggleLivePhotoVideos", () => {
-            filterLivePhotoVideos = !filterLivePhotoVideos;
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
-            setCookie('mphotos-filterLivePhotoVideos', filterLivePhotoVideos.toString());
+        window.addEventListener("toggleShortVideos", () => {
+            filterShortVideos = !filterShortVideos;
+            filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
+            setCookie('mphotos-filterShortVideos', filterShortVideos.toString());
             filterPhotosArray()});
         window.addEventListener("toggleLivePhotos", () => {
             filterLivePhotos = !filterLivePhotos;
-            filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
+            filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
             filterPhotosArray()});
 
@@ -212,7 +214,7 @@
     const setChunkedPhotos = () => {
         chunkedPhotos = chunkArray(filteredPhotosMetadata, chunkSize);
         calcRowHeights(showSquareThumbs);
-        activeVideoGuids = [];
+        activePlayingVideoGuids = [];
         cancelScrollDebounce();
     }
 
@@ -333,7 +335,18 @@
                 }
             }
         }
-        activeVideoGuids = visible;
+        const oldPlaying = activePlayingVideoGuids;
+        const newPlaying = visible.slice(0, 5);
+        activePlayingVideoGuids = newPlaying;
+        if (prevAutoPlayStatus) {
+            const videos = document.getElementsByTagName('video') as HTMLCollectionOf<HTMLVideoElement>;
+            for (let video of videos) {
+                video.play();
+            }
+            allVideosPaused = false;
+            playLivePhotos = true;
+            prevAutoPlayStatus = true;
+        }
     }
 
     // Handles list item updates (for scroll position, setting datepicker index)
@@ -341,9 +354,11 @@
         const { start, end } = e.detail;
         currentStartPhotoIndex = start;
         currentEndPhotoIndex = end;
+        console.log("start-end: "+start+"-"+end)
 
         isScrolling = true;
-        activeVideoGuids = [];
+        if (!allVideosPaused) pauseAllVideos();
+        activePlayingVideoGuids = [];
         cancelScrollDebounce();
         scrollDebounceTimer = setTimeout(() => onScrollSettled(start, end), 100);
 
@@ -364,6 +379,17 @@
         return `${m}:${s.toString().padStart(2, '0')}`;
     }
 
+    const pauseAllVideos = () => 
+    {
+        const videos = document.getElementsByTagName('video') as HTMLCollectionOf<HTMLVideoElement>;
+        for (let video of videos) {
+            video.pause();
+        }
+        allVideosPaused = true;
+        prevAutoPlayStatus = playLivePhotos;
+        playLivePhotos = false;
+    }
+
     // Set filteredPhotosMetadata according to filter options
     const filterPhotosArray = () => {
         if (filterTrash) {
@@ -376,8 +402,9 @@
             // typePredicates combines on an OR basis
             const typePredicates: Array<(p: PhotoModel) => boolean> = [];
             if (filterPhotos) typePredicates.push((p) => p.type === 'photo' && p.sidecarGuid == null);
+            if (filterLivePhotos) typePredicates.push((p) => p.sidecarGuid != null);
             if (filterVideos) typePredicates.push((p) => p.type === 'video');
-            if (filterLivePhotos) typePredicates.push((p) => p.sidecarGuid != null); 
+            if (filterShortVideos) typePredicates.push((p) => p.type === 'short-video');
 
             if (typePredicates.length > 0) {
                 filteredPhotosMetadata = filteredPhotosMetadata.filter(
@@ -386,10 +413,6 @@
             }
 
             // All else is on AND basis
-            if (filterLivePhotoVideos) 
-            {
-                filteredPhotosMetadata = filteredPhotosMetadata.filter((p) => p.type === 'live-photo-video');
-            }
             if (filterFavorites) {
                 filteredPhotosMetadata = filteredPhotosMetadata.filter((p) => p.isFavorite);
             }
@@ -401,27 +424,28 @@
         }
     }
 
-    const setFilters = (photos: boolean, videos: boolean, favorites: boolean, livePhotoVideos: boolean, livePhotos: boolean, trash: boolean) => {
+    const setFilters = (photos: boolean, videos: boolean, favorites: boolean, shortVideos: boolean, livePhotos: boolean, trash: boolean) => {
         filterPhotos = photos;
         filterVideos = videos;
         filterFavorites = favorites;
-        filterLivePhotoVideos = livePhotoVideos;
+        filterShortVideos = shortVideos;
         filterLivePhotos = livePhotos;
         filterTrash = trash;
-        filterAll = (!filterVideos && !filterFavorites && !filterLivePhotoVideos && !filterLivePhotos && !filterPhotos);
+        filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
         setCookie('mphotos-filterPhotos', filterPhotos.toString());
         setCookie('mphotos-filterVideos', filterVideos.toString());
         setCookie('mphotos-filterFavorites', filterFavorites.toString());
-        setCookie('mphotos-filterLivePhotoVideos', filterLivePhotoVideos.toString());
+        setCookie('mphotos-filterShortVideos', filterShortVideos.toString());
         setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
     }
 
     const togglePlayLivePhotos = () => {
         playLivePhotos = !playLivePhotos;
         if (!playLivePhotos) {
-            activeVideoGuids = [];
+            if (!allVideosPaused) pauseAllVideos();
+            activePlayingVideoGuids = [];
         }
-        else if (playLivePhotos && activeVideoGuids.length == 0)
+        else
         {
             onScrollSettled(currentStartPhotoIndex, currentEndPhotoIndex);
         }
@@ -457,7 +481,7 @@
     isFavoriteFiltered={filterFavorites}
     isShowingAll={filterAll}
     arePhotosSquare={showSquareThumbs}
-    isLivePhotoVideosFiltered={filterLivePhotoVideos}
+    isShortVideosFiltered={filterShortVideos}
     isPhotosFiltered={filterPhotos}
     isLivePhotosFiltered={filterLivePhotos}
     playLivePhotos={playLivePhotos}
@@ -502,25 +526,27 @@
                     <tr style="text-align:center;">
                         {#each chunkedPhotos[index] as currentPhotoMeta, itemIndex}
                             <td style="">
-                                <a on:click={() => openModal(currentPhotoMeta, index*chunkSize + itemIndex)} href='/'>
+                                <a on:click={() => openModal(currentPhotoMeta, (index-1)*chunkSize + itemIndex)} href='/'>
                                     <div style="position: relative; display: inline-block;">
-                                        {#if playLivePhotos && currentPhotoMeta.sidecarGuid && !isScrolling && activeVideoGuids.includes(currentPhotoMeta.guid)}
+                                        {#if currentPhotoMeta.sidecarGuid && chunkSize <= 5}
                                             <video 
-                                            muted autoplay loop playsinline preload="none"
+                                            id={currentPhotoMeta.guid}
+                                            muted autoplay={playLivePhotos} loop playsinline preload="none"
+                                            poster="api/photos/{currentPhotoMeta.guid}/thumb"
                                             src="api/video/{currentPhotoMeta.sidecarGuid}/loop"
                                             class:square-thumb={showSquareThumbs}
-                                            style="--row-height: {rowHeights[index]-2}px; background: url('api/photos/{currentPhotoMeta.guid}/thumb') center/contain no-repeat;"
-                                            />
+                                            style="--row-height: {rowHeights[index]-2}px;"
+                                            ></video>
                                         {:else}
                                             <img 
                                             id={currentPhotoMeta.guid}
-                                            src="api/photos/{currentPhotoMeta.guid}/thumb"
+                                            src={currentPhotoMeta.type === 'live-photo-video'? `api/photos/${currentPhotoMeta.referenceGuid}/thumb` : `api/photos/${currentPhotoMeta.guid}/thumb`}
                                             alt={currentPhotoMeta.dateTaken}
                                             class:square-thumb={showSquareThumbs}
                                             style="--row-height: {rowHeights[index]-2}px;"
                                             >
                                         {/if}
-                                        {#if currentPhotoMeta.type === 'video' || currentPhotoMeta.type === 'live-photo-video'}
+                                        {#if currentPhotoMeta.type === 'video' || currentPhotoMeta.type === 'short-video'}
                                             {#if currentPhotoMeta.lengthSeconds}
                                             <span class="video-duration-overlay">
                                                 {formatDuration(currentPhotoMeta.lengthSeconds)}

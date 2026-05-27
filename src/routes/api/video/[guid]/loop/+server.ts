@@ -9,7 +9,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
     const guid = params.guid as string;
     const sub1 = guid.substring(0, 2);
     const sub2 = guid.substring(2, 4);
-    const location = path.join(thumbsDir, sub1, sub2, guid + '_loop.mp4');
+    const location = path.join(thumbsDir, sub1, sub2, guid + '-loop.mp4');
 
     const exists = fs.existsSync(location);
     if (!exists) return new Response('Not found', { status: 404 });
@@ -17,6 +17,8 @@ export const GET: RequestHandler = async ({ request, params }) => {
     const stat = fs.statSync(location);
     const fileSize = stat.size;
     const range = request.headers.get('range');
+    const ext = path.extname(location).toLowerCase();
+    const mimeType = ext === '.mp4' ? 'video/mp4' : ext === '.mov' ? 'video/quicktime' : 'application/octet-stream';
 
     function nodeStreamToWeb(stream: fs.ReadStream) {
         return new ReadableStream({
@@ -37,7 +39,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
             status: 200,
             headers: {
                 'Content-Length': fileSize.toString(),
-                'Content-Type': 'video/mp4',
+                'Content-Type': mimeType,
                 'Accept-Ranges': 'bytes',
                 'Cache-Control': 'public, max-age=31536000, immutable'
             }
@@ -50,13 +52,16 @@ export const GET: RequestHandler = async ({ request, params }) => {
     const chunksize = end - start + 1;
 
     const fileStream = fs.createReadStream(location, { start, end });
+
+    console.log("Streaming live photo video:", guid, `bytes ${start}-${end}/${fileSize}`);
+
     return new Response(nodeStreamToWeb(fileStream), {
         status: 206,
         headers: {
             'Content-Range': `bytes ${start}-${end}/${fileSize}`,
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize.toString(),
-            'Content-Type': 'video/mp4',
+            'Content-Type': mimeType,
             'Cache-Control': 'public, max-age=31536000, immutable'
         }
     });
