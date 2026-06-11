@@ -49,6 +49,24 @@
 
     let allVideosPaused: boolean = false;
 
+    let blobUrlCache: Record<string, string> = {};
+    let preloadingBlobs: Set<string> = new Set();
+
+    async function preloadBlobUrl(guid: string) {
+        if (blobUrlCache[guid] || preloadingBlobs.has(guid)) return;
+        preloadingBlobs.add(guid);
+        try {
+            const resp = await fetch(`api/video/${guid}/loop`);
+            if (!resp.ok) return;
+            const blob = await resp.blob();
+            blobUrlCache = { ...blobUrlCache, [guid]: URL.createObjectURL(blob) };
+        } catch {
+            // preload failed, will use fallback
+        } finally {
+            preloadingBlobs.delete(guid);
+        }
+    }
+
     let libraryHighlighted: boolean = true;
     let favoritesHighlighted: boolean = false;
     let trashHighlighted: boolean = false;
@@ -322,7 +340,10 @@
         scrollDebounceTimer = null;
     }
 
-    onDestroy(() => cancelScrollDebounce());
+    onDestroy(() => {
+        cancelScrollDebounce();
+        Object.values(blobUrlCache).forEach(url => URL.revokeObjectURL(url));
+    });
 
     function onScrollSettled(start: number, end: number) {
         isScrolling = false;
@@ -331,7 +352,10 @@
             const row = chunkedPhotos[i];
             if (row) {
                 for (const photo of row) {
-                    if (photo.sidecarGuid) visible.push(photo.guid);
+                    if (photo.sidecarGuid) {
+                        visible.push(photo.guid);
+                        preloadBlobUrl(photo.sidecarGuid);
+                    }
                 }
             }
         }
@@ -397,7 +421,11 @@
         } else {
             filteredPhotosMetadata = originalPhotosMetadata.filter((photo: PhotoModel) => !photo.isTrash);
         }
-        
+
+        filteredPhotosMetadata = filteredPhotosMetadata.filter(
+            (photo: PhotoModel) => !(photo.type === 'live-photo-video' && photo.referenceGuid)
+        );
+
         if (!filterAll) {
             // typePredicates combines on an OR basis
             const typePredicates: Array<(p: PhotoModel) => boolean> = [];
@@ -528,12 +556,12 @@
                             <td style="">
                                 <a on:click={() => openModal(currentPhotoMeta, (index-1)*chunkSize + itemIndex)} href='/'>
                                     <div style="position: relative; display: inline-block;">
-                                        {#if currentPhotoMeta.sidecarGuid && chunkSize <= 5}
+                                        {#if currentPhotoMeta.sidecarGuid && chunkSize <= 5 && blobUrlCache[currentPhotoMeta.sidecarGuid]}
                                             <video 
                                             id={currentPhotoMeta.guid}
                                             muted autoplay={playLivePhotos} loop playsinline preload="none"
                                             poster="api/photos/{currentPhotoMeta.guid}/thumb"
-                                            src="api/video/{currentPhotoMeta.sidecarGuid}/loop"
+                                            src={blobUrlCache[currentPhotoMeta.sidecarGuid]}
                                             class:square-thumb={showSquareThumbs}
                                             style="--row-height: {rowHeights[index]-2}px;"
                                             ></video>

@@ -17,8 +17,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
     const stat = fs.statSync(location);
     const fileSize = stat.size;
     const range = request.headers.get('range');
-    const ext = path.extname(location).toLowerCase();
-    const mimeType = ext === '.mp4' ? 'video/mp4' : ext === '.mov' ? 'video/quicktime' : 'application/octet-stream';
+    const mimeType = 'video/mp4';
 
     function nodeStreamToWeb(stream: fs.ReadStream) {
         return new ReadableStream({
@@ -52,8 +51,6 @@ export const GET: RequestHandler = async ({ request, params }) => {
     const chunksize = end - start + 1;
 
     const fileStream = fs.createReadStream(location, { start, end });
-
-    console.log("Streaming live photo video:", guid, `bytes ${start}-${end}/${fileSize}`);
 
     return new Response(nodeStreamToWeb(fileStream), {
         status: 206,
