@@ -29,6 +29,50 @@
   });
 
   let isVideoPlaying: boolean = false;
+  let videoRef: HTMLVideoElement | undefined;
+  let videoPaused = true;
+  let videoCurrentTime = 0;
+  let videoDuration = 0;
+
+  function togglePlay() {
+    if (!videoRef) return;
+    if (videoRef.paused) {
+      videoRef.play();
+    } else {
+      videoRef.pause();
+    }
+  }
+
+  function skip(seconds: number) {
+    if (!videoRef) return;
+    videoRef.currentTime = Math.max(0, Math.min(videoDuration, videoRef.currentTime + seconds));
+  }
+
+  function seek(e: MouseEvent) {
+    if (!videoRef) return;
+    const bar = e.currentTarget as HTMLElement;
+    const rect = bar.getBoundingClientRect();
+    const pos = (e.clientX - rect.left) / rect.width;
+    videoRef.currentTime = pos * videoDuration;
+  }
+
+  function onVideoEnded() {
+    isVideoPlaying = false;
+    videoPaused = true;
+  }
+
+  function onVideoTimeUpdate(e: Event) {
+    const video = e.target as HTMLVideoElement;
+    videoCurrentTime = video.currentTime;
+    videoPaused = video.paused;
+  }
+
+  function onVideoLoadedMetadata(e: Event) {
+    const video = e.target as HTMLVideoElement;
+    videoDuration = video.duration || 0;
+  }
+
+  $: videoProgressPct = videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0;
 
   $: viewportWidth = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
   let isDetailsShown: boolean = false;
@@ -380,13 +424,36 @@
     <div class="slideshow" style="opacity:{slideshowOpacity};">
       {#each preloadPhotos as photo, i}
         {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'short-video') && i === nrToPreload}
-          <video width="100%" height="100%" controls autoplay>
-            <source 
-              src={"api/video/"+photo.guid}
-              type="video/mp4"
-              />
-            <track kind="captions" src="" srclang="en" label="English captions" default>
-          </video>
+          <div style="position: relative; width: 100%; height: 100%;">
+            <video
+              width="100%" height="100%"
+              autoplay playsinline
+              on:click={togglePlay}
+              on:timeupdate={onVideoTimeUpdate}
+              on:loadedmetadata={onVideoLoadedMetadata}
+              on:ended={onVideoEnded}
+              bind:this={videoRef}
+            >
+              <source src={"api/video/"+photo.guid} type="video/mp4" />
+            </video>
+            <div class="video-controls-overlay fadeout">
+              <div class="video-controls-center">
+                <button class="ctrl-btn skip-btn" on:click|stopPropagation={() => skip(-5)} aria-label="Rewind 5s">
+                  <img src="/rewind.svg" alt="Rewind 5s" class="ctrl-icon">
+                </button>
+                <button class="ctrl-btn play-btn" on:click|stopPropagation={togglePlay} aria-label={videoPaused ? 'Play' : 'Pause'}>
+                  <img src={videoPaused ? '/play.svg' : '/pause.svg'} alt={videoPaused ? 'Play' : 'Pause'} class="ctrl-icon play-ctrl-icon">
+                </button>
+                <button class="ctrl-btn skip-btn" on:click|stopPropagation={() => skip(5)} aria-label="Forward 5s">
+                  <img src="/forward.svg" alt="Forward 5s" class="ctrl-icon">
+                </button>
+              </div>
+              <div class="progress-row" on:click|stopPropagation={seek}>
+                <div class="progress-track"><div class="progress-fill" style="width: {videoProgressPct}%"></div></div>
+                <span class="time-label">{formatDuration(videoCurrentTime)} / {formatDuration(videoDuration)}</span>
+              </div>
+            </div>
+          </div>
         {:else}
           <img
             src={"api/photos/"+photo.guid+"/medium"}
@@ -412,21 +479,23 @@
               </span>
             </div>
           {/if}
-          <div>
-            <button 
-              class="icon {photos[currentIndex].isFavorite ? 'favorite-checked' : 'favorite-unchecked'} fadeout" 
-              on:click={() => setCurrentAsFavorite()}
-              aria-label={photos[currentIndex].isFavorite ? "Unmark as favorite" : "Mark as favorite"}>
-            </button>
-            <button 
-              class="icon {photos[currentIndex].isTrash ? 'trash-checked' : 'trash'} fadeout" 
-              on:click={() => setCurrentToTrash()}
-              aria-label="Move to trash">
-            </button>
-          </div>
         {/if}
       {/each}
     </div>
+  {#if !isVideoPlaying}
+    <div class="icon-row fadeout">
+      <button 
+        class="icon-btn {photos[currentIndex].isFavorite ? 'fav-on' : 'fav-off'}" 
+        on:click={() => setCurrentAsFavorite()}
+        aria-label={photos[currentIndex].isFavorite ? "Unmark as favorite" : "Mark as favorite"}>
+      </button>
+      <button 
+        class="icon-btn {photos[currentIndex].isTrash ? 'trash-on' : 'trash-off'}" 
+        on:click={() => setCurrentToTrash()}
+        aria-label="Move to trash">
+      </button>
+    </div>
+  {/if}
   {#if isDetailsShown}
     <div class="text-rounded-corners details" transition:slide={{duration: 200}}>
       <div>
@@ -614,6 +683,99 @@
       z-index: 15;
   }
 
+  .video-controls-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding-bottom: 64px;
+    pointer-events: none;
+  }
+
+  .video-controls-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 8px;
+  }
+
+  .ctrl-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    pointer-events: auto;
+    padding: 12px;
+    opacity: 0.85;
+    transition: opacity 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ctrl-btn:hover { opacity: 1; transform: scale(1.1); }
+  .ctrl-btn:active { transform: scale(0.95); }
+
+  .ctrl-icon {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .skip-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .play-btn {
+    width: 64px;
+    height: 64px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 50%;
+    padding: 16px;
+  }
+
+  .play-ctrl-icon {
+    width: 100%;
+    height: 100%;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 4px 0;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: white;
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+
+  .time-label {
+    color: white;
+    font-size: 12px;
+    font-family: monospace;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
   .details {
       position: absolute; 
       bottom: 60px; 
@@ -631,42 +793,31 @@
     line-height: 0.8;
   }
 
-  .icon {
+  .icon-row {
     position: fixed;
-    bottom: 10px;
-    width: 40px;
-    height: 40px;
-    background-color: white;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 28px;
     z-index: 20;
-    background-size: contain;
+  }
+
+  .icon-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
     border: none;
-  }
-  
-  .favorite-checked {
-    left: calc(50% - 40px);
-    right: 50%;
-    transform: translateX(-50%);
-    mask: url('/favorite-checked.svg') no-repeat center;
-  }
-  
-  .favorite-unchecked {
-    left: calc(50% - 40px);
-    right: 50%;
-    transform: translateX(-50%);
-    mask: url('/favorite-unchecked.svg') no-repeat center; 
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    cursor: pointer;
+    background-size: 24px;
+    background-repeat: no-repeat;
+    background-position: center;
   }
 
-  .trash {
-    left: calc(50% + 40px);
-    right: 50%;
-    transform: translateX(-50%);
-    mask: url('/deleted.svg') no-repeat center;
-  }
-
-  .trash-checked {
-    left: calc(50% + 40px);
-    right: 50%;
-    transform: translateX(-50%);
-    mask: url('/deleted-filled.svg') no-repeat center;
-  }
+  .fav-on { background-image: url('/favorite-checked.svg'); }
+  .fav-off { background-image: url('/favorite-unchecked.svg'); }
+  .trash-on { background-image: url('/deleted-filled.svg'); }
+  .trash-off { background-image: url('/deleted.svg'); }
 </style>
