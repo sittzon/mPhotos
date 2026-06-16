@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { env } from '$env/dynamic/private'
 import type { PhotoServerModel, PhotoModel } from '$api';
-import { getImageDimensions, getVideoDimensions, getVideoDuration, generateVideoThumbnail, shutdownExifTool, getHashString, generateThumbnailBytes, generateVideoLoopClip, getDateTakenFromPath } from '$helpers/imagehelper';
+import { getImageDimensions, getVideoDimensions, getVideoDuration, generateVideoThumbnail, getHashString, generateThumbnailBytes, generateVideoLoopClip, getDateTakenFromPath } from '$helpers/imagehelper';
 import { getFileInfosRecursively, photosMetaCacheKey } from '$helpers/filehelper';
 import { memoryCache } from '$helpers/memorycache';
 import type { FileInfo } from '../../../models/fileInfo';
@@ -193,7 +193,6 @@ const loadPhotos = async () => {
                 await fs.appendFile(errorLogFilename, `[${now}] Error loading photo: ${fileInfo.fullName}. Exception: ${e}\n`);
             }
         }
-        shutdownExifTool(); // Runs exiftool.end() to close child processes.
         memoryCache[photosMetaCacheKey] = photoMetadata;
         await fs.writeFile(metaDataFilename, JSON.stringify(photoMetadata));
     }

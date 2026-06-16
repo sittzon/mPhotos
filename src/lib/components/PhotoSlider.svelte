@@ -33,6 +33,14 @@
   let videoPaused = true;
   let videoCurrentTime = 0;
   let videoDuration = 0;
+  let controlsVisible = true;
+  let controlsHideTimeout: ReturnType<typeof setTimeout>;
+
+  function showControls() {
+    controlsVisible = true;
+    clearTimeout(controlsHideTimeout);
+    controlsHideTimeout = setTimeout(() => { controlsVisible = false; }, 3000);
+  }
 
   function togglePlay() {
     if (!videoRef) return;
@@ -75,6 +83,7 @@
   $: videoProgressPct = videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0;
 
   $: viewportWidth = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  $: if (isVideoPlaying) showControls();
   let isDetailsShown: boolean = false;
   let slideshowOpacity = 1; // Opacity of entire slideshow, used when dragging up/down to close
   const amountOfPixelsToClose = 100; // Pixels to drag before closing
@@ -105,6 +114,7 @@
   });
 
   onDestroy(() => {
+    clearTimeout(controlsHideTimeout);
     window.removeEventListener("resize", handleResize);
     document.removeEventListener("keyup", keyPressUp);
   });
@@ -135,6 +145,41 @@
       resetFade5s(el);         // restart fade timer
     });
     
+    if (isVideoPlaying) {
+      showControls();
+      if (key.code=='Space' || key.code=='KeyK') {
+        key.preventDefault();
+        togglePlay();
+        return;
+      }
+      if (key.code=='KeyJ') {
+        skip(-5);
+        return;
+      }
+      if (key.code=='KeyL') {
+        skip(5);
+        return;
+      }
+      if (key.code=='Escape') {
+        isVideoPlaying = false;
+        return;
+      }
+      if (key.code=='ArrowLeft') {
+        prev();
+        return;
+      }
+      if (key.code=='ArrowRight') {
+        next();
+        return;
+      }
+      return;
+    }
+
+    if (key.code=='KeyK' && (photos[currentIndex].type === 'video' || photos[currentIndex].type === 'short-video')) {
+      isVideoPlaying = true;
+      return;
+    }
+
     if (key.code=='ArrowRight') {
       next();
     }
@@ -154,6 +199,9 @@
     }
     if (key.code=='KeyF') {
       setCurrentAsFavorite();
+    }
+    if (key.code=='KeyD') {
+      setCurrentToTrash();
     }
   }
   
@@ -370,6 +418,31 @@
       return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
+  function toggleFullscreen() {
+    if (!videoRef) return;
+    if (videoRef.webkitEnterFullscreen) {
+      videoRef.webkitEnterFullscreen();
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      videoRef.parentElement?.requestFullscreen();
+    }
+  }
+
+  function onVideoPointerMove(e: PointerEvent) {
+    if (e.pointerType !== 'mouse') return;
+    showControls();
+  }
+
+  function toggleControls() {
+    if (controlsVisible) {
+      controlsVisible = false;
+      clearTimeout(controlsHideTimeout);
+    } else {
+      showControls();
+    }
+  }
+
   const setCurrentAsFavorite = async () => {
     const currentPhoto = photos[currentIndex];
     photos[currentIndex].isFavorite = !photos[currentIndex].isFavorite;
@@ -412,23 +485,23 @@
 </script>
 
 <div id="slider" on:touchstart={onTouchStart} on:touchmove={onTouchMove} on:touchend={onTouchEnd} role="navigation">
-  {#if scale <= 1}
+  {#if scale <= 1 && !isVideoPlaying}
     <button class="arrow left fadeout" on:click={prev} >‹</button>
     <button class="arrow right fadeout" on:click={next} >›</button>
-    <button class="close-button fadeout" on:click={() => { resetSlider(); closeModal(); }}>✖</button>
-
+    
     <div class="text-rounded-corners date fadeout5s" style="opacity:{slideshowOpacity};">
       <p>{getDateFormattedLong(photos[currentIndex])}</p>
     </div>
+  {:else if scale <= 1}
+    <button class="close-button fadeout" on:click={() => { resetSlider(); closeModal(); }}>✖</button>
   {/if}
     <div class="slideshow" style="opacity:{slideshowOpacity};">
       {#each preloadPhotos as photo, i}
         {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'short-video') && i === nrToPreload}
-          <div style="position: relative; width: 100%; height: 100%;">
+          <div style="position: relative; width: 100%; height: 100%;" on:click|stopPropagation={toggleControls} on:pointermove|stopPropagation={onVideoPointerMove}>
             <video
               width="100%" height="100%"
               autoplay playsinline
-              on:click={togglePlay}
               on:timeupdate={onVideoTimeUpdate}
               on:loadedmetadata={onVideoLoadedMetadata}
               on:ended={onVideoEnded}
@@ -436,7 +509,7 @@
             >
               <source src={"api/video/"+photo.guid} type="video/mp4" />
             </video>
-            <div class="video-controls-overlay fadeout">
+            <div class="video-controls-overlay" class:visible={controlsVisible}>
               <div class="video-controls-center">
                 <button class="ctrl-btn skip-btn" on:click|stopPropagation={() => skip(-5)} aria-label="Rewind 5s">
                   <img src="/rewind.svg" alt="Rewind 5s" class="ctrl-icon">
@@ -452,6 +525,9 @@
                 <div class="progress-track"><div class="progress-fill" style="width: {videoProgressPct}%"></div></div>
                 <span class="time-label">{formatDuration(videoCurrentTime)} / {formatDuration(videoDuration)}</span>
               </div>
+              <button class="fullscreen-btn ctrl-btn" on:click|stopPropagation={toggleFullscreen} aria-label="Fullscreen">
+                <img src="/fullscreen.svg" alt="Fullscreen" class="ctrl-icon">
+              </button>
             </div>
           </div>
         {:else}
@@ -484,19 +560,23 @@
     </div>
   {#if !isVideoPlaying}
     <div class="icon-row fadeout">
-      <button 
-        class="icon-btn {photos[currentIndex].isFavorite ? 'fav-on' : 'fav-off'}" 
-        on:click={() => setCurrentAsFavorite()}
-        aria-label={photos[currentIndex].isFavorite ? "Unmark as favorite" : "Mark as favorite"}>
-      </button>
-      <button 
-        class="icon-btn {photos[currentIndex].isTrash ? 'trash-on' : 'trash-off'}" 
-        on:click={() => setCurrentToTrash()}
-        aria-label="Move to trash">
-      </button>
+      <div class="icon-wrapper">
+        <button 
+          class="icon-btn {photos[currentIndex].isFavorite ? 'fav-on' : 'fav-off'}" 
+          on:click={() => setCurrentAsFavorite()}
+          aria-label={photos[currentIndex].isFavorite ? "Unmark as favorite" : "Mark as favorite"}>
+        </button>
+      </div>
+      <div class="icon-wrapper">
+        <button 
+          class="icon-btn {photos[currentIndex].isTrash ? 'trash-on' : 'trash-off'}" 
+          on:click={() => setCurrentToTrash()}
+          aria-label="Move to trash">
+        </button>
+      </div>
     </div>
   {/if}
-  {#if isDetailsShown}
+  {#if isDetailsShown && !isVideoPlaying}
     <div class="text-rounded-corners details" transition:slide={{duration: 200}}>
       <div>
         <b>Name:</b>
@@ -692,8 +772,25 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-bottom: 64px;
     pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .video-controls-overlay.visible {
+    opacity: 1;
+  }
+
+  .video-controls-overlay .ctrl-btn,
+  .video-controls-overlay .progress-row,
+  .video-controls-overlay .fullscreen-btn {
+    pointer-events: none;
+  }
+
+  .video-controls-overlay.visible .ctrl-btn,
+  .video-controls-overlay.visible .progress-row,
+  .video-controls-overlay.visible .fullscreen-btn {
+    pointer-events: auto;
   }
 
   .video-controls-center {
@@ -755,16 +852,18 @@
 
   .progress-track {
     flex: 1;
-    height: 4px;
-    background: rgba(255,255,255,0.3);
-    border-radius: 2px;
+    height: 6px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 3px;
     overflow: hidden;
+    box-shadow: inset 0 0 2px rgba(0,0,0,0.3);
   }
 
   .progress-fill {
     height: 100%;
-    background: white;
-    border-radius: 2px;
+    background: #eee;
+    border-radius: 3px;
+    box-shadow: 0 0 6px rgba(255,255,255,0.4);
     transition: width 0.1s linear;
   }
 
@@ -774,6 +873,17 @@
     font-family: monospace;
     white-space: nowrap;
     pointer-events: none;
+  }
+
+  .fullscreen-btn {
+    position: absolute;
+    bottom: 52px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+    pointer-events: auto;
+    z-index: 5;
   }
 
   .details {
@@ -795,23 +905,33 @@
 
   .icon-row {
     position: fixed;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
     display: flex;
-    gap: 28px;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
     z-index: 20;
+  }
+
+  .icon-wrapper {
+    background-color: rgba(255,255,255,0.7);
+    border-radius: 12px;
+    height: 48px;
+    width: 48px;
   }
 
   .icon-btn {
     width: 48px;
     height: 48px;
-    border-radius: 50%;
-    border: none;
-    background: white;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border-radius: 12px;
+    border: 1px solid white;
+    background: transparent;
+    box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.9);
     cursor: pointer;
-    background-size: 24px;
+    background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
   }

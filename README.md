@@ -19,6 +19,7 @@ Then run:
 
 ## Development
 Define variables in **.env** and then run:
+- `brew install ffmpeg-full`
 - `npm install`
 - `npm run dev`
 
