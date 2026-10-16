@@ -1,7 +1,7 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import { env } from '$env/dynamic/private';
 import { memoryCache } from '$helpers/memorycache';
-import { photosMetaCacheKey } from '$helpers/filehelper';
+import { photosMetaCacheKey, photosVersionKey } from '$helpers/filehelper';
 import { getFileContentHash, generateThumbnailBytes, generateVideoThumbnail, generateVideoLoopClip, getImageDimensions, getVideoDimensions, getVideoDuration, getDateTakenFromPath, shutdownExifTool } from '$helpers/imagehelper';
 import fs from 'fs/promises';
 import path from 'path';
@@ -229,6 +229,7 @@ async function processPendingEvents() {
 
     photoMetadata.sort((a, b) => a.dateTaken.localeCompare(b.dateTaken));
     memoryCache[photosMetaCacheKey] = photoMetadata;
+    memoryCache[photosVersionKey] = (memoryCache[photosVersionKey] || 0) + 1;
     await fs.writeFile(metaDataFilename, JSON.stringify(photoMetadata));
     console.log('Metadata updated from file watcher');
 }

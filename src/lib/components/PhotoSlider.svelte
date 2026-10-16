@@ -4,14 +4,27 @@
   import ThumbnailStrip from '$components/ThumbnailStrip.svelte';
   import { slide } from 'svelte/transition';
 
-  export let photos: Array<PhotoModel> = [];
+  export let photos: Array<PhotoModel | undefined> = [];
   export let closeModal = () => {}; // Feedback close to parent
   export let photoIndex: number = 0; // Start index in photos array
   export let nrToPreload: number = 1; // Number of photos to preload on each side
+  export let ensurePhotoLoaded: ((index: number) => void) | undefined = undefined; // Ask parent to fetch metadata for a photo index not loaded yet
 
   let currentIndex = photoIndex;
   $: preloadIndexes = Array.from({ length: nrToPreload * 2 + 1 }, (_, i) => wrap(currentIndex - nrToPreload + i));
   $: preloadPhotos = preloadIndexes.map(i => photos[i]);
+  $: currentPhoto = photos[currentIndex] ?? null;
+
+  // Request the metadata of the current and surrounding photos when their range is not loaded yet
+  $: ensureLoaded(currentIndex, preloadIndexes);
+  const ensureLoaded = (index: number, preload: number[]) => {
+    if (!ensurePhotoLoaded) return;
+    for (const i of [index, ...preload]) {
+      if (i >= 0 && i < photos.length && photos[i] === undefined) {
+        ensurePhotoLoaded(i);
+      }
+    }
+  };
 
   // Reactive array of transform strings — recalculated when any dependency changes
   $: transforms = preloadPhotos.map((photo, i) => {
@@ -175,7 +188,7 @@
       return;
     }
 
-    if (key.code=='KeyK' && (photos[currentIndex].type === 'video' || photos[currentIndex].type === 'short-video')) {
+    if (key.code=='KeyK' && currentPhoto && (currentPhoto.type === 'video' || currentPhoto.type === 'short-video')) {
       isVideoPlaying = true;
       return;
     }
@@ -205,7 +218,7 @@
     }
   }
   
-  const getDateFormattedLong = (photo: PhotoModel) => {
+  const getDateFormattedLong = (photo: PhotoModel | null | undefined) => {
     if (photo == null || photo.dateTaken == null) {
       return "";
     }
@@ -444,8 +457,8 @@
   }
 
   const setCurrentAsFavorite = async () => {
-    const currentPhoto = photos[currentIndex];
-    photos[currentIndex].isFavorite = !photos[currentIndex].isFavorite;
+    if (!currentPhoto) return;
+    photos[currentIndex]!.isFavorite = !photos[currentIndex]!.isFavorite;
 
     await fetch("/api/favorites/" + currentPhoto.guid, {
       method: "POST",
@@ -464,8 +477,8 @@
   }
 
   const setCurrentToTrash = async () => {
-    const currentPhoto = photos[currentIndex];
-    photos[currentIndex].isTrash = !photos[currentIndex].isTrash;
+    if (!currentPhoto) return;
+    photos[currentIndex]!.isTrash = !photos[currentIndex]!.isTrash;
 
     await fetch("/api/trash/" + currentPhoto.guid, {
       method: "POST",
@@ -490,13 +503,14 @@
     <button class="arrow right fadeout" on:click={next} >›</button>
     
     <div class="text-rounded-corners date fadeout5s" style="opacity:{slideshowOpacity};">
-      <p>{getDateFormattedLong(photos[currentIndex])}</p>
+      <p>{getDateFormattedLong(currentPhoto)}</p>
     </div>
   {:else if scale <= 1}
     <button class="close-button fadeout" on:click={() => { resetSlider(); closeModal(); }}>✖</button>
   {/if}
     <div class="slideshow" style="opacity:{slideshowOpacity};">
       {#each preloadPhotos as photo, i}
+        {#if photo}
         {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'short-video') && i === nrToPreload}
           <div style="position: relative; width: 100%; height: 100%;" on:click|stopPropagation={toggleControls} on:pointermove|stopPropagation={onVideoPointerMove}>
             <video
@@ -556,39 +570,40 @@
             </div>
           {/if}
         {/if}
+        {/if}
       {/each}
     </div>
   {#if !isVideoPlaying}
     <div class="icon-row fadeout">
       <div class="icon-wrapper">
         <button 
-          class="icon-btn {photos[currentIndex].isFavorite ? 'fav-on' : 'fav-off'}" 
+          class="icon-btn {currentPhoto?.isFavorite ? 'fav-on' : 'fav-off'}" 
           on:click={() => setCurrentAsFavorite()}
-          aria-label={photos[currentIndex].isFavorite ? "Unmark as favorite" : "Mark as favorite"}>
+          aria-label={currentPhoto?.isFavorite ? "Unmark as favorite" : "Mark as favorite"}>
         </button>
       </div>
       <div class="icon-wrapper">
         <button 
-          class="icon-btn {photos[currentIndex].isTrash ? 'trash-on' : 'trash-off'}" 
+          class="icon-btn {currentPhoto?.isTrash ? 'trash-on' : 'trash-off'}" 
           on:click={() => setCurrentToTrash()}
           aria-label="Move to trash">
         </button>
       </div>
     </div>
   {/if}
-  {#if isDetailsShown && !isVideoPlaying}
+  {#if isDetailsShown && !isVideoPlaying && currentPhoto}
     <div class="text-rounded-corners details" transition:slide={{duration: 200}}>
       <div>
         <b>Name:</b>
-        <p>{photos[currentIndex].name}</p>
+        <p>{currentPhoto.name}</p>
       </div>
       <div>
         <b>Resolution:</b>
-        <p>{photos[currentIndex].width}x{photos[currentIndex].height} px</p>
+        <p>{currentPhoto.width}x{currentPhoto.height} px</p>
       </div>
       <div>
         <b>Size:</b>
-        <p>{photos[currentIndex].sizeKb} Kb</p>
+        <p>{currentPhoto.sizeKb} Kb</p>
       </div>
     </div>
   {/if}

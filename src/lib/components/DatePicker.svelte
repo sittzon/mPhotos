@@ -1,12 +1,11 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { PhotoModel }from "$api";
+    import type { DateIndexEntry } from "$api";
     import { createEventDispatcher } from 'svelte';
     import { cubicOut } from 'svelte/easing';
 
-    export let photos: Array<PhotoModel> = [];
+    export let dateIndex: Array<DateIndexEntry> = [];
     export let photoIndex: number = 0;
-    export let chunkSize: number = 3;
     export let closeFromParent: boolean = false;
 
     $: if (closeFromParent) {
@@ -14,7 +13,6 @@
      }
 
     let isDatePickerOpen: boolean = false;
-    let allMonths: Set<{index: number, dateAsString: string}> = new Set();
     const months = [ "January", "February", "March", "April", "May", "June", 
            "July", "August", "September", "October", "November", "December" ];
     const dispatch = createEventDispatcher();
@@ -22,7 +20,6 @@
 
     onMount(() => {
         document.addEventListener('click', handleDatePickerToggleOpen);
-        allMonths = getAllDatesFormattedShort();
     });
 
     const handleDatePickerToggleOpen = (e: Event) => {
@@ -38,49 +35,41 @@
         }
     }
 
-    const getDateFormattedShort = (photo: PhotoModel) => {
-        if (photo == null || photo.dateTaken == null) {
+    const getDateFormattedShort = (dateTaken: string | null | undefined) => {
+        if (dateTaken == null) {
             return "No date";
         }
         
-        if (errorNoDateFound == photo.dateTaken)
+        if (errorNoDateFound == dateTaken)
         {
             return errorNoDateFound;
         }
 
         // -1 because 0-index months array
-        const currentMonth = +photo.dateTaken.split('-')[1] - 1;
-        const currentYear = +photo.dateTaken.split('-')[0];
+        const currentMonth = +dateTaken.split('-')[1] - 1;
+        const currentYear = +dateTaken.split('-')[0];
         return months[currentMonth] + ' ' + currentYear;
     }
 
-    const getAllDatesFormattedShort = () => {
-        let datesSet = new Set<{index: number, dateAsString: string}>();
-        let addedIndexes = new Set<string>();
-        // Only take every n photo in all photos to reduce number of entries
-        for (let index = 0; index < photos.length; index += chunkSize)
-        {
-            const photo = photos[index];
-        
-            if (errorNoDateFound == photo.dateTaken)
-            {
-                const dateAsString = errorNoDateFound;
-                if (!addedIndexes.has(dateAsString)) {
-                    addedIndexes.add(dateAsString);
-                    datesSet.add({index, dateAsString});
-                }
-            }
-
-            const currentMonth = +(photo.dateTaken as string).split('-')[1] - 1;
-            const currentYear = +(photo.dateTaken as string).split('-')[0];
-            const dateAsString = months[currentMonth] + ' ' + currentYear;
-            if (!addedIndexes.has(dateAsString)) {
-                addedIndexes.add(dateAsString);
-                datesSet.add({index, dateAsString});
-            }
-        };
-        return datesSet;
+    // Date label for the photo currently shown in the middle of the list.
+    // Derived from the compact month index so it also works for ranges
+    // whose photos have not been downloaded yet. Takes its inputs as
+    // arguments so the reactive statement below tracks them.
+    const getCurrentDateFormattedShort = (photoIdx: number, idx: DateIndexEntry[]) => {
+        if (idx.length === 0) {
+            return getDateFormattedShort(null);
+        }
+        let entry = idx[0];
+        for (let i = 1; i < idx.length; i++) {
+            if (idx[i].index > photoIdx) break;
+            entry = idx[i];
+        }
+        return getDateFormattedShort(entry.dateTaken);
     }
+
+    // Recompute the label when the scroll position or the date index changes
+    // (Svelte does not track variables used inside a called function)
+    $: currentDateString = getCurrentDateFormattedShort(photoIndex, dateIndex);
     
     // Custom transition that handles both size and position
     function slideAndResizeSequential(node: HTMLElement, { duration = 400, easing = cubicOut } = {}) {
@@ -123,14 +112,14 @@
 
 <button id="datepicker" class="text-rounded-corners current-date">
     {#if !isDatePickerOpen}
-        <div transition:slideAndResizeSequential={{duration: 300}}>{getDateFormattedShort(photos[photoIndex])}</div>
+        <div transition:slideAndResizeSequential={{duration: 300}}>{currentDateString}</div>
     {:else}
         <ul id="datelist" class="full-height" transition:slideAndResizeSequential={{duration: 300}}>
-            {#each getAllDatesFormattedShort() as {index, dateAsString}}
+            {#each dateIndex as entry (entry.index)}
                 <li>
-                    <button class={dateAsString == getDateFormattedShort(photos[photoIndex]) ? "selected-date" : ""}
-                            on:click={() => dispatch("setScroll", index)}>
-                        {dateAsString}
+                    <button class={getDateFormattedShort(entry.dateTaken) == currentDateString ? "selected-date" : ""}
+                            on:click={() => dispatch("setScroll", entry.index)}>
+                        {getDateFormattedShort(entry.dateTaken)}
                     </button>
                 </li>
             {/each}

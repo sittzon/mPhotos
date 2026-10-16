@@ -5,6 +5,8 @@ import { memoryCache } from '$helpers/memorycache';
 import type { FileInfo } from '../models/fileInfo';
 
 export const photosMetaCacheKey = 'photosMeta';
+// Bumped whenever the photo metadata content changes (used to invalidate derived caches)
+export const photosVersionKey = 'photosMetaVersion';
 
 // Map GUID to original file location
 export function guidToLocation(guid: string): string | null {

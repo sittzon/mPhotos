@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from "svelte";
 	import { writable } from 'svelte/store';
-    import type { PhotoModel } from "$api";
+    import type { DateIndexEntry, MetadataRangeResponse, PhotoModel } from "$api";
 	import VirtualList from 'svelte-tiny-virtual-list';
 	import ItemsUpdatedEvent from 'svelte-tiny-virtual-list';
     import PhotoSlider from '$components/PhotoSlider.svelte';
@@ -10,11 +10,22 @@
 
     let virtualList: VirtualList;
     
-    let originalPhotosMetadata : Array<PhotoModel> = [];
-    let filteredPhotosMetadata : Array<PhotoModel> = [];
+    // Dense array of all photos (after current filters/sort order). Entries are
+    // undefined until the range they belong to has been downloaded from the server.
+    let photos : Array<PhotoModel | undefined> = [];
+    let totalPhotos: number = 0;
+    let rangeSize: number = 200;      // Photos per range, confirmed by the first server response
+    let dateIndex: DateIndexEntry[] = [];   // Compact month index for the date picker
+    let order: 'desc' | 'asc' = 'desc';
+
+    // Range bookkeeping: which ranges are downloaded and which fetches are in flight
+    const loadedRanges: Set<number> = new Set();
+    const pendingRanges: Map<number, Promise<void>> = new Map();
+    // Bumped on every filter/sort change so stale range responses are discarded
+    let dataVersion: number = 0;
     
     // The actual array of photos used in the virtual list, divided into chunks/rows for display
-    let chunkedPhotos : Array<Array<PhotoModel>> = [];
+    let chunkedPhotos : Array<Array<PhotoModel | undefined>> = [];
     let chunkSize: number =  5;
     let maxChunkSize: number = 12; // Varies based on window width
     const minChunkSize: number = 3; // No less than 3 columns
@@ -25,9 +36,13 @@
 
     let currentStartPhotoIndex: number = 0;
     let currentEndPhotoIndex: number = 0;
+    // Current scroll position, used to keep the view anchored when row heights change
+    let currentScrollOffset: number = 0;
+    let scrollOffset: number | undefined = undefined;   // Passed to the virtual list for scroll compensation
     
     let windowHeight: number = 1000;
     let scrollToIndex: number | undefined = undefined;
+
     let closeAllModalsFromParent = false;
     let isFingerDown: boolean = false;
     
@@ -74,8 +89,6 @@
     const months = [ "January", "February", "March", "April", "May", "June", 
            "July", "August", "September", "October", "November", "December" ];
 
-    $: currentNoPhotos = filteredPhotosMetadata.length > 0? filteredPhotosMetadata.length : 0;
-
     onMount(async () =>
     {
         windowHeight = window.outerHeight;
@@ -100,34 +113,22 @@
         filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
         showSquareThumbs = tempSquareProportions === 'true' ? true : false;
 
-        // Fetch metadata (includes favorites + trash flags + URL fields)
-        await fetch("/api/metadata", {
-            method: 'GET',
-            headers: {
-                'content-type': 'application/json'
-            }
-        })
-        .then((response) => {
-            if (response.ok) {
-                return response.json();
-            } else {
-                console.error("Failed to fetch photo metadata, status:", response.status);
-                return [];
-            }
-        })
-        .then((data) => {
-            originalPhotosMetadata = data;
-            filterPhotosArray();
-            if (filteredPhotosMetadata.length > 0) {
-                setTimeout(() => {
-                    scrollToIndex = tempScrollToIndex ? +tempScrollToIndex : -1;
-                }, 10);
-            }
-        });
+        // Fetch the first range of metadata (includes total count + date index)
+        await refreshMetadata('initial');
+        if (totalPhotos > 0) {
+            // Restore previous scroll position (a row index stored in a cookie)
+            const targetRow = tempScrollToIndex ? +tempScrollToIndex : -1;
+            setTimeout(() => {
+                scrollToIndex = targetRow;
+                // Release scrollToIndex so later row height updates don't re-scroll the list
+                setTimeout(() => { scrollToIndex = undefined; }, 300);
+            }, 10);
+        }
 
         // Add event listeners
-        window.addEventListener("orientationchange", () => calcRowHeights(showSquareThumbs));
-        window.addEventListener("resize", () => calcRowHeights(showSquareThumbs));
+        window.addEventListener("orientationchange", () => calcRowHeights(showSquareThumbs, true));
+        window.addEventListener("resize", () => calcRowHeights(showSquareThumbs, true));
+        window.addEventListener("scroll", handleScrollCapture, true);
         window.addEventListener("scroll", () => {isFingerDown = true; handleCloseAllModals()});
         window.addEventListener("touchstart", handleTouchStart);
         window.addEventListener("touchend", handleTouchEnd);
@@ -147,32 +148,32 @@
             setCookie('mphotos-filterFavorites', filterFavorites.toString());
             setCookie('mphotos-filterShortVideos', filterShortVideos.toString());
             setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
-            filterPhotosArray()});
+            refreshMetadata('filters')});
         window.addEventListener("toggleVideos", () => {
             filterVideos = !filterVideos; 
             filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterVideos', filterVideos.toString());
-            filterPhotosArray()});
+            refreshMetadata('filters')});
         window.addEventListener("togglePhotos", () => {
             filterPhotos = !filterPhotos; 
             filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterPhotos', filterPhotos.toString());
-            filterPhotosArray()});
+            refreshMetadata('filters')});
         window.addEventListener("toggleFavorites", () => {
             filterFavorites = !filterFavorites; 
             filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterFavorites', filterFavorites.toString());
-            filterPhotosArray()});
+            refreshMetadata('filters')});
         window.addEventListener("toggleShortVideos", () => {
             filterShortVideos = !filterShortVideos;
             filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterShortVideos', filterShortVideos.toString());
-            filterPhotosArray()});
+            refreshMetadata('filters')});
         window.addEventListener("toggleLivePhotos", () => {
             filterLivePhotos = !filterLivePhotos;
             filterAll = (!filterVideos && !filterFavorites && !filterShortVideos && !filterLivePhotos && !filterPhotos);
             setCookie('mphotos-filterLivePhotos', filterLivePhotos.toString());
-            filterPhotosArray()});
+            refreshMetadata('filters')});
 
         // Show elements again immediately on user action
         ['click', 'touchstart', 'mousemove'].forEach(event => {
@@ -217,8 +218,8 @@
     }
 
     // Split any array into groups of n size
-    const chunkArray = (array: Array<any>, size: number) => {
-        const chunked = [];
+    const chunkArray = (array: Array<PhotoModel | undefined>, size: number) => {
+        const chunked: Array<Array<PhotoModel | undefined>> = [];
         // Push empty row at top
         chunked.push([]);
         for (let i = 0; i < array.length; i += size) {
@@ -227,11 +228,20 @@
         return chunked;
     }
 
-    // Set chunked photos array with current chunk size and calculates row heights
-    // To be run when photo contents, width or height are changed or zoom level is changed
-    const setChunkedPhotos = () => {
-        chunkedPhotos = chunkArray(filteredPhotosMetadata, chunkSize);
-        calcRowHeights(showSquareThumbs);
+    // Rebuild the rows (chunked photos) from the dense photo array and recalculate row heights.
+    // To be run when photo contents, chunk size or sort order changed.
+    // When `compensate` is true the scroll offset is adjusted for height changes
+    // above the viewport, so loading a range does not shift the current view.
+    const rebuildRows = (compensate: boolean = false) => {
+        if (totalPhotos === 0) {
+            chunkedPhotos = [];
+            rowHeights = [80];
+            activePlayingVideoGuids = [];
+            cancelScrollDebounce();
+            return;
+        }
+        chunkedPhotos = chunkArray(photos, chunkSize);
+        calcRowHeights(showSquareThumbs, compensate);
         activePlayingVideoGuids = [];
         cancelScrollDebounce();
     }
@@ -248,7 +258,7 @@
         if (chunkSize - minChunkSize > 0) {
             chunkSize -= 2;
             setCookie('mphotos-zoomLevel', chunkSize.toString());
-            setChunkedPhotos();
+            rebuildRows();
         }
     }
     
@@ -258,46 +268,83 @@
         if (chunkSize < maxChunkSize) {
             chunkSize += 2;
             setCookie('mphotos-zoomLevel', chunkSize.toString());
-            setChunkedPhotos();
+            rebuildRows();
         }
     }
 
-    // Calculate row heights based on current chunk size, window width and thumbnail proportions
-    const calcRowHeights = (useSquareThumbs: boolean = false) => {
+    // Calculate row heights based on current chunk size, window width and thumbnail proportions.
+    // Rows whose photos have not been downloaded yet are given an estimated height
+    // (the average of the loaded rows), which is replaced with the real height as
+    // soon as the range containing them arrives.
+    const calcRowHeights = (useSquareThumbs: boolean = false, compensate: boolean = false) => {
         updateMaxChunkSize();
-        rowHeights = [];
         const windowInnerWidth = window.innerWidth;
         const maxImgWidth = windowInnerWidth / chunkSize;
+        const oldHeights = rowHeights;
+        const newHeights: number[] = [];
 
         // Row height 80px at the top
-        rowHeights.push(80);
+        newHeights.push(80);
 
         if (useSquareThumbs) {
             for (let i = 1; i < chunkedPhotos.length; ++i) {
-                rowHeights.push(maxImgWidth); // fixed size for square thumbs
+                newHeights.push(maxImgWidth); // fixed size for square thumbs
             }
-            if (currentNoPhotos > 0) virtualList.recomputeSizes(0);
-            return;
-        }
-        
-        for (let i = 1; i < chunkedPhotos.length; ++i) {
-            const chunk = chunkedPhotos[i];
-            
-            // Default thumb size is 225x300px
-            let maxHeight = 0;
-            // Calculate minimum aspect ratio for current row/chunk
-            for (let n = 0; n < chunk.length; ++n) {
-                if (chunk[n] && chunk[n].height && chunk[n].width) {
-                    const aspectRatio = (chunk[n].width ?? 1) / (chunk[n].height ?? 1);
-                    const h = maxImgWidth / aspectRatio;
-                    maxHeight = h > maxHeight? h : maxHeight;
+        } else {
+            let heightSum = 0;
+            let heightCount = 0;
+            const unloadedRows: number[] = [];
+
+            for (let i = 1; i < chunkedPhotos.length; ++i) {
+                const chunk = chunkedPhotos[i];
+                let maxHeight = 0;
+                let hasLoadedPhotos = false;
+
+                // Calculate the tallest thumbnail aspect ratio for current row/chunk
+                for (let n = 0; n < chunk.length; ++n) {
+                    const photo = chunk[n];
+                    if (photo && photo.height && photo.width) {
+                        hasLoadedPhotos = true;
+                        const aspectRatio = photo.width / photo.height;
+                        const h = maxImgWidth / aspectRatio;
+                        maxHeight = h > maxHeight ? h : maxHeight;
+                    }
+                }
+
+                if (hasLoadedPhotos) {
+                    const height = +maxHeight.toFixed(0);
+                    newHeights.push(height);
+                    heightSum += height;
+                    heightCount++;
+                } else {
+                    // No information about this range yet, assume a height for now
+                    unloadedRows.push(i);
+                    newHeights.push(0);
                 }
             }
-            const tallestHeight = maxHeight;
-            rowHeights.push(+tallestHeight.toFixed(0));
+
+            const estimatedHeight = heightCount > 0
+                ? Math.round(heightSum / heightCount)
+                : Math.round(maxImgWidth);
+            for (const row of unloadedRows) {
+                newHeights[row] = estimatedHeight;
+            }
         }
 
-        if (currentNoPhotos > 0) virtualList.recomputeSizes(0);
+        // Keep the first visible row anchored when heights above the viewport changed
+        // (skipped while a scroll target is pending, the scroll target handles it)
+        if (compensate && scrollToIndex === undefined && currentStartPhotoIndex > 1) {
+            let delta = 0;
+            for (let i = 1; i < currentStartPhotoIndex && i < newHeights.length; i++) {
+                delta += newHeights[i] - (oldHeights[i] ?? newHeights[i]);
+            }
+            if (delta !== 0) {
+                scrollOffset = currentScrollOffset + delta;
+            }
+        }
+
+        rowHeights = newHeights;
+        if (totalPhotos > 0) virtualList?.recomputeSizes(0);
     }
 
     // Opens photo modal
@@ -352,7 +399,7 @@
             const row = chunkedPhotos[i];
             if (row) {
                 for (const photo of row) {
-                    if (photo.sidecarGuid) {
+                    if (photo?.sidecarGuid) {
                         visible.push(photo.guid);
                         preloadBlobUrl(photo.sidecarGuid);
                     }
@@ -391,10 +438,40 @@
         datepickerIndex = photoIndex;
         const tempScrollIndex = getCookie('mphotos-scrollToIndex');
         if (tempScrollIndex && +tempScrollIndex === middlePhotoRow) {
+            fetchVisibleRanges(start, end);
             return;
         }
         setCookie('mphotos-scrollToIndex', middlePhotoRow.toString());
+
+        // Download the metadata ranges that are visible (or about to be visible)
+        fetchVisibleRanges(start, end);
     }
+
+    // Ensure the ranges covering the given visible row span are downloaded
+    const fetchVisibleRanges = (startRow: number, endRow: number) => {
+        if (totalPhotos === 0) return;
+        const firstPhoto = Math.max(0, (startRow - 1) * chunkSize);
+        const lastPhoto = Math.min(totalPhotos - 1, (endRow - 1) * chunkSize + chunkSize - 1);
+        if (lastPhoto >= firstPhoto) {
+            ensureRangesForPhotos(firstPhoto, lastPhoto);
+        }
+    }
+
+    // Tracks the actual scroll position of the virtual list. Uses the capture phase
+    // because the library does not emit its afterScroll event for programmatic scrolls,
+    // and scroll events themselves do not bubble.
+    const handleScrollCapture = (e: Event) => {
+        const target = e.target as HTMLElement | null;
+        if (target && target.classList && target.classList.contains('virtual-list-wrapper')) {
+            currentScrollOffset = target.scrollTop;
+        }
+    };
+
+    // Tracks the actual scroll position, used as base for scroll compensation
+    const handleAfterScroll = (e: CustomEvent<{ offset: number }>) => {
+        currentScrollOffset = e.detail.offset;
+        handleCloseAllModals();
+    };
     
     // Format seconds as mm:ss
     function formatDuration(seconds: number): string {
@@ -414,43 +491,145 @@
         playLivePhotos = false;
     }
 
-    // Set filteredPhotosMetadata according to filter options
-    const filterPhotosArray = () => {
-        if (filterTrash) {
-            filteredPhotosMetadata = originalPhotosMetadata.filter((photo: PhotoModel) => photo.isTrash);
-        } else {
-            filteredPhotosMetadata = originalPhotosMetadata.filter((photo: PhotoModel) => !photo.isTrash);
-        }
-
-        filteredPhotosMetadata = filteredPhotosMetadata.filter(
-            (photo: PhotoModel) => !(photo.type === 'live-photo-video' && photo.referenceGuid)
-        );
-
+    // Build query params reflecting the current filter and sort options
+    const metadataParams = (): URLSearchParams => {
+        const params = new URLSearchParams();
+        if (filterTrash) params.set('trash', 'only');
+        if (filterFavorites) params.set('fav', '1');
         if (!filterAll) {
-            // typePredicates combines on an OR basis
-            const typePredicates: Array<(p: PhotoModel) => boolean> = [];
-            if (filterPhotos) typePredicates.push((p) => p.type === 'photo' && p.sidecarGuid == null);
-            if (filterLivePhotos) typePredicates.push((p) => p.sidecarGuid != null);
-            if (filterVideos) typePredicates.push((p) => p.type === 'video');
-            if (filterShortVideos) typePredicates.push((p) => p.type === 'short-video');
-
-            if (typePredicates.length > 0) {
-                filteredPhotosMetadata = filteredPhotosMetadata.filter(
-                    (p) => typePredicates.some((fn) => fn(p))
-                );
-            }
-
-            // All else is on AND basis
-            if (filterFavorites) {
-                filteredPhotosMetadata = filteredPhotosMetadata.filter((p) => p.isFavorite);
-            }
+            const types: string[] = [];
+            if (filterPhotos) types.push('photo');
+            if (filterLivePhotos) types.push('live');
+            if (filterVideos) types.push('video');
+            if (filterShortVideos) types.push('short-video');
+            if (types.length > 0) params.set('types', types.join(','));
         }
-        if (filteredPhotosMetadata.length > 0) {
-            setChunkedPhotos();
-        } else {
-            chunkedPhotos = [];
-        }
+        if (order === 'asc') params.set('order', 'asc');
+        return params;
     }
+
+    // Fetch a single metadata range from the server.
+    // Returns null if the response is stale (filters/order changed while in flight).
+    const requestRange = async (rangeIndex: number, version: number): Promise<MetadataRangeResponse | null> => {
+        const params = metadataParams();
+        params.set('range', rangeIndex.toString());
+        params.set('size', rangeSize.toString());
+        try {
+            const response = await fetch(`/api/metadata?${params.toString()}`, {
+                method: 'GET',
+                headers: { 'content-type': 'application/json' }
+            });
+            if (!response.ok) {
+                console.error("Failed to fetch photo metadata, status:", response.status);
+                return null;
+            }
+            const data: MetadataRangeResponse = await response.json();
+            if (version !== dataVersion) return null;   // Superseded by a filter/sort change
+            return data;
+        } catch (e) {
+            console.error("Failed to fetch photo metadata:", e);
+            return null;
+        }
+    };
+
+    // Replace all client-side state with a fresh snapshot from the server
+    const applySnapshot = (data: MetadataRangeResponse) => {
+        totalPhotos = data.total;
+        rangeSize = data.rangeSize;
+        dateIndex = data.dateIndex;
+        photos = new Array<PhotoModel | undefined>(totalPhotos).fill(undefined);
+        loadedRanges.clear();
+        applyRangeData(data);
+        rebuildRows(false);
+    };
+
+    // Store the photos of a fetched range in the dense photo array
+    const applyRangeData = (data: MetadataRangeResponse) => {
+        const start = data.rangeIndex * data.rangeSize;
+        for (let i = 0; i < data.photos.length; i++) {
+            photos[start + i] = data.photos[i];
+        }
+        loadedRanges.add(data.rangeIndex);
+        dateIndex = data.dateIndex;
+    };
+
+    // Apply a range that was fetched while scrolling. If the library size changed
+    // in the meantime (e.g. new photos were indexed), fall back to a full snapshot.
+    const applyRange = (data: MetadataRangeResponse) => {
+        if (data.total !== totalPhotos || data.rangeSize !== rangeSize) {
+            applySnapshot(data);
+            return;
+        }
+        applyRangeData(data);
+        rebuildRows(true);
+    };
+
+    // Make sure the given range is downloaded; fetches it if needed
+    const ensureRange = (rangeIndex: number): Promise<void> => {
+        if (rangeIndex < 0 || rangeIndex * rangeSize >= totalPhotos) return Promise.resolve();
+        if (loadedRanges.has(rangeIndex)) return Promise.resolve();
+        const pending = pendingRanges.get(rangeIndex);
+        if (pending) return pending;
+
+        const version = dataVersion;
+        const promise = requestRange(rangeIndex, version)
+            .then(data => { if (data) applyRange(data); })
+            .finally(() => { pendingRanges.delete(rangeIndex); });
+        pendingRanges.set(rangeIndex, promise);
+        return promise;
+    };
+
+    // Make sure all ranges covering photos [fromIndex, toIndex] are downloaded,
+    // with one extra range of margin on each side
+    const ensureRangesForPhotos = (fromIndex: number, toIndex: number, marginRanges: number = 1): Promise<void> => {
+        if (totalPhotos === 0) return Promise.resolve();
+        const from = Math.max(0, Math.min(fromIndex, toIndex));
+        const to = Math.min(totalPhotos - 1, Math.max(fromIndex, toIndex));
+        const firstRange = Math.max(0, Math.floor(from / rangeSize) - marginRanges);
+        const lastRange = Math.min(
+            Math.ceil(totalPhotos / rangeSize) - 1,
+            Math.floor(to / rangeSize) + marginRanges
+        );
+        const promises: Promise<void>[] = [];
+        for (let r = firstRange; r <= lastRange; r++) {
+            promises.push(ensureRange(r));
+        }
+        return Promise.all(promises).then(() => undefined);
+    };
+
+    // Reload metadata from scratch; used on initial load and when filters or sort order change
+    const refreshMetadata = async (mode: 'initial' | 'filters' | 'sort'): Promise<void> => {
+        const version = ++dataVersion;
+        pendingRanges.clear();
+        loadedRanges.clear();
+        const data = await requestRange(0, version);
+        if (!data || version !== dataVersion) return;
+        applySnapshot(data);
+
+        if (mode !== 'initial' && totalPhotos > 0) {
+            // Jump to the top of the (new) list
+            setTimeout(() => {
+                scrollToIndex = 0;
+                setTimeout(() => { scrollToIndex = undefined; }, 300);
+            }, 10);
+        }
+    };
+
+    // Scroll to a photo index (used by the date picker). The range containing the
+    // photo is downloaded (if not already) and the heights are updated along the way.
+    const jumpToPhotoIndex = (photoIndex: number) => {
+        const row = Math.floor(Math.max(0, photoIndex) / chunkSize);
+        scrollToIndex = row;
+        ensureRangesForPhotos(photoIndex, photoIndex, 1).finally(() => {
+            setTimeout(() => { scrollToIndex = undefined; }, 300);
+        });
+    };
+
+    // Change sort order; ranges are re-fetched from the server in the new order
+    const setOrder = (latestFirst: boolean) => {
+        order = latestFirst ? 'desc' : 'asc';
+        refreshMetadata('sort');
+    };
 
     const setFilters = (photos: boolean, videos: boolean, favorites: boolean, shortVideos: boolean, livePhotos: boolean, trash: boolean) => {
         filterPhotos = photos;
@@ -482,16 +661,19 @@
 </script>
 
 {#if isPhotoModalOpen}
-    <PhotoSlider photos={filteredPhotosMetadata} photoIndex={currentPhotoIndex} closeModal={handleClosePhotoSlider} nrToPreload={2}/>
+    <PhotoSlider 
+        photos={photos} 
+        photoIndex={currentPhotoIndex} 
+        closeModal={handleClosePhotoSlider} 
+        nrToPreload={2}
+        ensurePhotoLoaded={(index) => ensureRangesForPhotos(index, index)} />
 {/if}
 <Options
-    photos={filteredPhotosMetadata}
     currentChunkSize={chunkSize}
     maxChunkSize={maxChunkSize}
     minChunkSize={minChunkSize}
-    sortedPhotosCallback={(sortedPhotos) => {
-        filteredPhotosMetadata = sortedPhotos;
-        setChunkedPhotos();
+    orderCallback={(latestFirst) => {
+        setOrder(latestFirst);
     }}
     zoomInCallback={() => {
         zoomIn();
@@ -501,7 +683,7 @@
     }}
     toggleSquareProportionsCallback={() => {
         showSquareThumbs = !showSquareThumbs;
-        calcRowHeights(showSquareThumbs);
+        calcRowHeights(showSquareThumbs, true);
         setCookie('mphotos-squareProportions', showSquareThumbs.toString());
     }}
     closeFromParent={closeAllModalsFromParent}
@@ -518,14 +700,13 @@
     }}
 />
 <DatePicker 
-    photos={filteredPhotosMetadata} 
+    dateIndex={dateIndex} 
     photoIndex={datepickerIndex} 
-    chunkSize={chunkSize}
-    on:setScroll={(e) => {scrollToIndex = Math.floor(e.detail / chunkSize)}}
+    on:setScroll={(e) => {jumpToPhotoIndex(e.detail)}}
     closeFromParent={closeAllModalsFromParent}
 />
 <div class="text-rounded-corners nr-of-photos">
-    <p>{currentNoPhotos}</p>
+    <p>{totalPhotos}</p>
 </div>
 
 <div id="virtual-list-wrapper">
@@ -544,8 +725,9 @@
             scrollToAlignment='center'
             scrollToBehaviour='instant'
             on:itemsUpdated={handleListItemUpdate}
-            on:afterScroll={handleCloseAllModals}
+            on:afterScroll={handleAfterScroll}
             {scrollToIndex}
+            {scrollOffset}
             >
 
         <div slot="item" let:index let:style {style}>
@@ -554,6 +736,7 @@
                     <tr style="text-align:center;">
                         {#each chunkedPhotos[index] as currentPhotoMeta, itemIndex}
                             <td style="">
+                                {#if currentPhotoMeta}
                                 <a on:click={() => openModal(currentPhotoMeta, (index-1)*chunkSize + itemIndex)} href='/'>
                                     <div style="position: relative; display: inline-block;">
                                         {#if currentPhotoMeta.sidecarGuid && chunkSize <= 5 && blobUrlCache[currentPhotoMeta.sidecarGuid]}
@@ -563,7 +746,7 @@
                                             poster="api/photos/{currentPhotoMeta.guid}/thumb"
                                             src={blobUrlCache[currentPhotoMeta.sidecarGuid]}
                                             class:square-thumb={showSquareThumbs}
-                                            style="--row-height: {rowHeights[index]-2}px;"
+                                            style="--row-height: {(rowHeights[index] ?? 80)-2}px;"
                                             ></video>
                                         {:else}
                                             <img 
@@ -571,7 +754,7 @@
                                             src={currentPhotoMeta.type === 'live-photo-video'? `api/photos/${currentPhotoMeta.referenceGuid}/thumb` : `api/photos/${currentPhotoMeta.guid}/thumb`}
                                             alt={currentPhotoMeta.dateTaken}
                                             class:square-thumb={showSquareThumbs}
-                                            style="--row-height: {rowHeights[index]-2}px;"
+                                            style="--row-height: {(rowHeights[index] ?? 80)-2}px;"
                                             >
                                         {/if}
                                         {#if currentPhotoMeta.type === 'video' || currentPhotoMeta.type === 'short-video'}
@@ -587,6 +770,7 @@
                                         {/if}
                                     </div>
                                 </a>
+                                {/if}
                             </td>
                         {/each}
                     </tr>
@@ -608,7 +792,7 @@
                     favoritesHighlighted = false;
                     trashHighlighted = false;
                     setFilters(true, true, false, false, false, false);
-                    filterPhotosArray(); }} 
+                    refreshMetadata('filters'); }} 
                     aria-label="Show all photos and videos">
             </button>
         </div>
@@ -619,7 +803,7 @@
                     favoritesHighlighted = true;
                     trashHighlighted = false;
                     setFilters(true, true, true, false, false, false);
-                    filterPhotosArray(); }}
+                    refreshMetadata('filters'); }}
                     aria-label="Show favorite photos and videos">
             </button>
         </div>
@@ -630,7 +814,7 @@
                     favoritesHighlighted = false;
                     trashHighlighted = true;
                     setFilters(false, false, false, false, false, true);
-                    filterPhotosArray(); 
+                    refreshMetadata('filters'); 
                     }}
                     aria-label="Show photos in trash, to be deleted">
             </button>

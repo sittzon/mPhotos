@@ -2,9 +2,9 @@ import type { RequestHandler } from '@sveltejs/kit';
 import fs from 'fs/promises';
 import path from 'path';
 import { env } from '$env/dynamic/private'
-import type { PhotoServerModel, PhotoModel } from '$api';
+import type { DateIndexEntry, MetadataRangeResponse, PhotoServerModel, PhotoModel } from '$api';
 import { getImageDimensions, getVideoDimensions, getVideoDuration, generateVideoThumbnail, getHashString, generateThumbnailBytes, generateVideoLoopClip, getDateTakenFromPath } from '$helpers/imagehelper';
-import { getFileInfosRecursively, photosMetaCacheKey } from '$helpers/filehelper';
+import { getFileInfosRecursively, photosMetaCacheKey, photosVersionKey } from '$helpers/filehelper';
 import { memoryCache } from '$helpers/memorycache';
 import type { FileInfo } from '../../../models/fileInfo';
 
@@ -16,6 +16,7 @@ const favoritesFilename = path.join(thumbsDir, env.FAVORITES_FILE || 'favorites.
 const trashFilename = path.join(thumbsDir, env.TRASH_FILE || 'trash.json');
 const thumbnailSizeWidth = Number(env.THUMBNAIL_SIZE) || 300;
 const mediumSizeWidth = Number(env.MEDIUM_SIZE) || 1200;
+const defaultRangeSize = Number(env.METADATA_RANGE_SIZE) || 200;
 const videoExts = ['.mp4', '.mov'];
 const imageExts = ['.jpg', '.jpeg', '.heic', '.heif', '.png'];
 
@@ -182,6 +183,7 @@ const loadPhotos = async () => {
                 
                 // Update in-memory cache
                 memoryCache[photosMetaCacheKey] = photoMetadata;
+                memoryCache[photosVersionKey] = (memoryCache[photosVersionKey] || 0) + 1;
 
                 // Only write to file every 50th photo to reduce disk writes
                 i = (i + 1) % 50;
@@ -241,60 +243,148 @@ const createSubDirectoryRecursively = async (rootDir: string, guid: string) => {
     return outDir;
 }
 
+interface ViewParams {
+    order: 'asc' | 'desc';
+    trash: 'hide' | 'only';
+    fav: boolean;
+    types: string[];
+}
+
+interface MetadataView {
+    list: PhotoModel[];
+    dateIndex: DateIndexEntry[];
+}
+
+// Filters matching what the client offers in its filter menu.
+// Note: live-photo-video entries that belong to a still photo are always hidden,
+// since they are shown through their reference photo instead.
+const typePredicates: Record<string, (p: PhotoModel) => boolean> = {
+    photo: p => p.type === 'photo' && p.sidecarGuid == null,
+    live: p => p.sidecarGuid != null,
+    video: p => p.type === 'video',
+    'short-video': p => p.type === 'short-video'
+};
+
+// Cache of the last built (filtered + sorted) view, keyed by filter params and
+// anything that can invalidate it (metadata version, favorites/trash file mtimes)
+let viewCache: { key: string; view: MetadataView } | null = null;
+
+const readGuidSet = async (filename: string): Promise<Set<string>> => {
+    try {
+        const exists = await fs.stat(filename).then(() => true).catch(() => false);
+        if (!exists) return new Set<string>();
+        const raw = await fs.readFile(filename, 'utf-8');
+        return new Set<string>(JSON.parse(raw));
+    } catch {
+        return new Set<string>();
+    }
+};
+
+const fileMtime = (filename: string): Promise<number> =>
+    fs.stat(filename).then(s => s.mtimeMs).catch(() => 0);
+
+// One entry per distinct date group (month) so the client can build a date picker
+// without downloading all photos. Non-standard dates (e.g. 'error-no-date-found')
+// are grouped by their first 7 characters instead.
+const buildDateIndex = (list: PhotoModel[]): DateIndexEntry[] => {
+    const dateIndex: DateIndexEntry[] = [];
+    let lastKey: string | null = null;
+    for (let i = 0; i < list.length; i++) {
+        const key = (list[i].dateTaken || '').substring(0, 7);
+        if (lastKey === null || key !== lastKey) {
+            dateIndex.push({ index: i, dateTaken: list[i].dateTaken });
+            lastKey = key;
+        }
+    }
+    return dateIndex;
+};
+
+// Build (or reuse a cached) filtered + sorted view of all photos, including its date index
+const getView = async (photos: PhotoServerModel[], params: ViewParams): Promise<MetadataView> => {
+    const version = memoryCache[photosVersionKey] || 0;
+    const [favMtime, trashMtime] = await Promise.all([fileMtime(favoritesFilename), fileMtime(trashFilename)]);
+    const cacheKey = JSON.stringify(params) + '|' + version + '|' + photos.length + '|' + favMtime + '|' + trashMtime;
+    if (viewCache && viewCache.key === cacheKey) return viewCache.view;
+
+    const favoriteSet = await readGuidSet(favoritesFilename);
+    const trashSet = await readGuidSet(trashFilename);
+    const typeFns = params.types.map(t => typePredicates[t]).filter(fn => fn != null);
+
+    const list: PhotoModel[] = photos
+        .filter(x => (params.trash === 'only') === trashSet.has(x.guid))
+        .filter(x => !(x.type === 'live-photo-video' && x.referenceGuid))
+        .filter(x => typeFns.length === 0 || typeFns.some(fn => fn(x)))
+        .filter(x => !params.fav || favoriteSet.has(x.guid))
+        .map(x => ({
+            dateTaken: x.dateTaken,
+            guid: x.guid,
+            name: x.name,
+            type: x.type,
+            sizeKb: x.sizeKb,
+            width: x.width,
+            height: x.height,
+            lengthSeconds: x.lengthSeconds,
+            isFavorite: favoriteSet.has(x.guid),
+            isTrash: trashSet.has(x.guid),
+            sidecarGuid: x.sidecarGuid,
+            referenceGuid: x.referenceGuid
+        }))
+        .sort((a, b) => {
+            // Push any "error-no-date-found" entries to the end, in both sort orders
+            const aError = a.dateTaken === 'error-no-date-found';
+            const bError = b.dateTaken === 'error-no-date-found';
+            if (aError && !bError) return 1;
+            if (bError && !aError) return -1;
+
+            return params.order === 'asc'
+                ? a.dateTaken.localeCompare(b.dateTaken)
+                : b.dateTaken.localeCompare(a.dateTaken);
+        });
+
+    const view: MetadataView = { list, dateIndex: buildDateIndex(list) };
+    viewCache = { key: cacheKey, view };
+    return view;
+};
+
 /// GET /api/metadata
-/// Returns all photo metadata with embedded favorites, trash, and URL fields,
-/// sorted by dateTaken descending
+/// Returns photo metadata in ranges (paged), together with the total number of
+/// matching photos and a compact date index for the date picker.
+///
+/// Query params:
+///   range  - 0-based range index to return (default 0)
+///   size   - number of photos per range (default 200)
+///   order  - "desc" (newest first, default) or "asc" (oldest first)
+///   trash  - "hide" (default) or "only"
+///   fav    - "1" to only include favorites
+///   types  - comma separated subset of: photo,live,video,short-video (default: all)
 export const GET: RequestHandler = async ({ url }) => {
     await loadPhotos();
     const photos: PhotoServerModel[] = memoryCache[photosMetaCacheKey] || [];
 
-    // Read favorites
-    let favoriteSet = new Set<string>();
-    try {
-        const favExists = await fs.stat(favoritesFilename).then(() => true).catch(() => false);
-        if (favExists) {
-            const favRaw = await fs.readFile(favoritesFilename, 'utf-8');
-            const favArray: string[] = JSON.parse(favRaw);
-            favoriteSet = new Set(favArray);
-        }
-    } catch {
-        // No favorites file yet, use empty set
-    }
+    const typesParam = (url.searchParams.get('types') || '')
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t in typePredicates);
+    const params: ViewParams = {
+        order: url.searchParams.get('order') === 'asc' ? 'asc' : 'desc',
+        trash: url.searchParams.get('trash') === 'only' ? 'only' : 'hide',
+        fav: url.searchParams.get('fav') === '1',
+        types: typesParam
+    };
+    const rangeSize = Math.max(1, parseInt(url.searchParams.get('size') || '', 10) || defaultRangeSize);
+    const rangeIndex = Math.max(0, parseInt(url.searchParams.get('range') || '', 10) || 0);
 
-    // Read trash
-    let trashSet = new Set<string>();
-    try {
-        const trashExists = await fs.stat(trashFilename).then(() => true).catch(() => false);
-        if (trashExists) {
-            const trashRaw = await fs.readFile(trashFilename, 'utf-8');
-            const trashArray: string[] = JSON.parse(trashRaw);
-            trashSet = new Set(trashArray);
-        }
-    } catch {
-        // No trash file yet, use empty set
-    }
-
-    const result: PhotoModel[] = photos.map(x => ({
-        dateTaken: x.dateTaken,
-        guid: x.guid,
-        name: x.name,
-        type: x.type,
-        sizeKb: x.sizeKb,
-        width: x.width,
-        height: x.height,
-        lengthSeconds: x.lengthSeconds,
-        isFavorite: favoriteSet.has(x.guid),
-        isTrash: trashSet.has(x.guid),
-        sidecarGuid: x.sidecarGuid,
-        referenceGuid: x.referenceGuid
-    }))
-    .sort((a, b) => {
-        // Push any "error-no-date-found" entries to the end
-        if (a.dateTaken === 'error-no-date-found' && b.dateTaken !== 'error-no-date-found') return 1;
-        if (b.dateTaken === 'error-no-date-found' && a.dateTaken !== 'error-no-date-found') return -1;
-
-        // Otherwise, normal descending sort by dateTaken
-        return b.dateTaken.localeCompare(a.dateTaken);
+    const { list, dateIndex } = await getView(photos, params);
+    const start = rangeIndex * rangeSize;
+    const payload: MetadataRangeResponse = {
+        total: list.length,
+        rangeSize,
+        rangeIndex,
+        photos: list.slice(start, start + rangeSize),
+        dateIndex
+    };
+    return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
     });
-    return new Response(JSON.stringify(result), { status: 200 });
 };

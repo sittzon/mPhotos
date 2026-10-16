@@ -1,14 +1,12 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { PhotoModel } from "$api";
     import FilterOptions from './FilterOptions.svelte';
     import { cubicOut } from 'svelte/easing';
 
-    export let photos: Array<PhotoModel> = [];
     export let currentChunkSize: number = 5;
     export let minChunkSize: number = 3;
     export let maxChunkSize: number = 12;
-    export let sortedPhotosCallback: (photos: PhotoModel[]) => void = () => {};
+    export let orderCallback: (latestFirst: boolean) => void = () => {};
     export let zoomInCallback: () => void = () => {};
     export let zoomOutCallback: () => void = () => {};
     export let toggleSquareProportionsCallback: () => void = () => {};
@@ -77,21 +75,9 @@
     }
 
     const sort = (latestFirst = true) => {
-        const sortedPhotos = photos.slice().sort((a, b) => {
-            const dateA = new Date(a.dateTaken as string).getTime();
-            const dateB = new Date(b.dateTaken as string).getTime();
-            return latestFirst ? dateB - dateA : dateA - dateB;
-        });
         isSortedByLatest = latestFirst;
-        options.filter(o => {
-            if (o.id === 0) {
-                o.disabled = isSortedByLatest;
-            }
-            if (o.id === 1) {
-                o.disabled = !isSortedByLatest;
-            }
-        });
-        sortedPhotosCallback(sortedPhotos);
+        // The actual sorting happens on the server (ranges are served in this order)
+        orderCallback(latestFirst);
     }
 
     // Custom transition that handles both size and position
