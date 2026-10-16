@@ -11,7 +11,9 @@
   export let ensurePhotoLoaded: ((index: number) => void) | undefined = undefined; // Ask parent to fetch metadata for a photo index not loaded yet
 
   let currentIndex = photoIndex;
-  $: preloadIndexes = Array.from({ length: nrToPreload * 2 + 1 }, (_, i) => wrap(currentIndex - nrToPreload + i));
+  // Clamp preload count so wrapped indexes never collide (keyed each blocks require unique keys)
+  $: preloadCount = Math.min(nrToPreload, Math.max(0, Math.floor((photos.length - 1) / 2)));
+  $: preloadIndexes = Array.from({ length: preloadCount * 2 + 1 }, (_, i) => wrap(currentIndex - preloadCount + i));
   $: preloadPhotos = preloadIndexes.map(i => photos[i]);
   $: currentPhoto = photos[currentIndex] ?? null;
 
@@ -28,10 +30,10 @@
 
   // Reactive array of transform strings — recalculated when any dependency changes
   $: transforms = preloadPhotos.map((photo, i) => {
-    const relIndex = i - nrToPreload; // 0 for current, negative = left, positive = right
+    const relIndex = i - preloadCount; // 0 for current, negative = left, positive = right
     const offset = relIndex * (viewportWidth + 10); // px offset from center
 
-    if (i === nrToPreload) {
+    if (i === preloadCount) {
       // current slide uses scale / translateX / translateY / rotate and diffX/diffY
       // ensure px units are present
       return `scale(${scale}) translateX(${-diffX + translateX}px) translateY(${-diffY + translateY}px) rotate(${rotate}deg)`;
@@ -509,9 +511,10 @@
     <button class="close-button fadeout" on:click={() => { resetSlider(); closeModal(); }}>✖</button>
   {/if}
     <div class="slideshow" style="opacity:{slideshowOpacity};">
-      {#each preloadPhotos as photo, i}
+      {#each preloadIndexes as photoIdx, i (photoIdx)}
+        {@const photo = photos[photoIdx]}
         {#if photo}
-        {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'short-video') && i === nrToPreload}
+        {#if isVideoPlaying && (photo.type === 'video' || photo.type === 'short-video') && i === preloadCount}
           <div style="position: relative; width: 100%; height: 100%;" on:click|stopPropagation={toggleControls} on:pointermove|stopPropagation={onVideoPointerMove}>
             <video
               width="100%" height="100%"
@@ -548,13 +551,13 @@
           <img
             src={"api/photos/"+photo.guid+"/medium"}
             class="slide 
-              {i === nrToPreload ? 'current' : i < nrToPreload ? 'previous' : 'next'} 
+              {i === preloadCount ? 'current' : i < preloadCount ? 'previous' : 'next'} 
               {animating ? 'animating' : ''}
               "
             alt={photo.dateTaken}
             style="transform: {transforms[i]};"
           />
-          {#if (photo.type === 'video' || photo.type === 'short-video') && !isVideoPlaying && i === nrToPreload}
+          {#if (photo.type === 'video' || photo.type === 'short-video') && !isVideoPlaying && i === preloadCount}
             <div class="play-icon-container">
               <button 
               class="play-icon {animating ? 'animating' : ''}" 
