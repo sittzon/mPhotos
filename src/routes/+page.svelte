@@ -898,7 +898,7 @@
     .nr-of-photos {
         position: fixed;
         left: 10px;
-        top: 85px; 
+        top: max(105px, calc(var(--safe-top) + 65px)); 
         height: 25px;
         padding: 0 5px 0 5px;
     }

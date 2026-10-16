@@ -132,7 +132,7 @@
         cursor: pointer;
         font-size: 18px; 
         left: 10px; 
-        top: 50px;
+        top: max(70px, calc(var(--safe-top) + 30px));
         text-align: center;
         color: darkslategray;
         align-items: center;

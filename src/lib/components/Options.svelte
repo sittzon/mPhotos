@@ -154,7 +154,7 @@
     #options {
         cursor: pointer;
         font-size: 16px;
-        top: 50px;
+        top: max(70px, calc(var(--safe-top) + 30px));
         right: 10px;
         position: fixed;
         align-items: center;

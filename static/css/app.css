@@ -1,5 +1,11 @@
 @import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
 
+/* Safe-area inset: let fixed top UI clear the notch/status bar. It resolves to 0px in a
+   normal browser tab, so max()/calc() fall back to the original spacing there. */
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     background-color: black;
