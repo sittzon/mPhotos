@@ -435,12 +435,13 @@
 
   function toggleFullscreen() {
     if (!videoRef) return;
-    if (videoRef.webkitEnterFullscreen) {
-      videoRef.webkitEnterFullscreen();
+    const video = videoRef as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+    if (video.webkitEnterFullscreen) {
+      video.webkitEnterFullscreen();
     } else if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
-      videoRef.parentElement?.requestFullscreen();
+      video.parentElement?.requestFullscreen();
     }
   }
 

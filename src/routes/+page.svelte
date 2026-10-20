@@ -3,7 +3,7 @@
 	import { writable } from 'svelte/store';
     import type { DateIndexEntry, MetadataRangeResponse, PhotoModel } from "$api";
 	import VirtualList from 'svelte-tiny-virtual-list';
-	import ItemsUpdatedEvent from 'svelte-tiny-virtual-list';
+	import type { ItemsUpdatedEvent } from 'svelte-tiny-virtual-list';
     import PhotoSlider from '$components/PhotoSlider.svelte';
     import DatePicker from '$components/DatePicker.svelte';
     import Options from "$components/Options.svelte";
@@ -410,8 +410,8 @@
         const newPlaying = visible.slice(0, 5);
         activePlayingVideoGuids = newPlaying;
         if (prevAutoPlayStatus) {
-            const videos = document.getElementsByTagName('video') as HTMLCollectionOf<HTMLVideoElement>;
-            for (let video of videos) {
+            const videos = document.getElementsByTagName('video');
+            for (const video of Array.from(videos)) {
                 video.play();
             }
             allVideosPaused = false;
@@ -482,8 +482,8 @@
 
     const pauseAllVideos = () => 
     {
-        const videos = document.getElementsByTagName('video') as HTMLCollectionOf<HTMLVideoElement>;
-        for (let video of videos) {
+        const videos = document.getElementsByTagName('video');
+        for (const video of Array.from(videos)) {
             video.pause();
         }
         allVideosPaused = true;

@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import type { PhotoServerModel } from '$api';
 import { memoryCache } from '$helpers/memorycache';
-import type { FileInfo } from '../models/fileInfo';
+import type { FileInfo } from '../models/FileInfo';
 
 export const photosMetaCacheKey = 'photosMeta';
 // Bumped whenever the photo metadata content changes (used to invalidate derived caches)

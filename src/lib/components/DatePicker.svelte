@@ -28,7 +28,7 @@
             isDatePickerOpen = !isDatePickerOpen;
             setTimeout(() => {
                 const target = document.getElementsByClassName("selected-date").item(0);
-                target.scrollIntoView({ behavior: "smooth", block: "center" });
+                target?.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 300);
         } else {
             isDatePickerOpen = false;

@@ -46,7 +46,7 @@
     onMount(() => {
         document.addEventListener('toggleOpenFilterOptions', (event) => {
             console.log("Toggled from parent!");
-            isModalOpen = event.detail.isOpen;
+            isModalOpen = (event as CustomEvent<{ isOpen: boolean }>).detail.isOpen;
         });
     });
 </script>

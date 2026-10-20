@@ -165,9 +165,9 @@ async function runQueue(items: Array<{ FullName: string; Name: string; Extension
 
 // Main function to convert all files in input directory
 export async function convert() {
-  const files = (await getFileInfosRecursively(INPUT_DIR)).filter((f) =>
-    SUPPORTED_EXT.includes(f.Extension)
-  );
+  const files = (await getFileInfosRecursively(INPUT_DIR))
+    .map((f) => ({ FullName: f.fullName, Name: f.name, Extension: f.extension, Length: f.length }))
+    .filter((f) => SUPPORTED_EXT.includes(f.Extension));
 
   console.log(`Found ${files.length} file(s).`);
   console.log(`Parallel: ${CONCURRENCY}, Lossless: ${LOSSLESS}, Quality: ${QUALITY}`);
