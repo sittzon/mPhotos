@@ -232,9 +232,11 @@ async function processPendingEvents() {
             try {
                 await generateMedia(job.photo, { force: job.force });
             } catch (e) {
-                console.error(`Error generating media for ${job.photo.location}:`, e);
                 const now = new Date().toISOString();
-                await fs.appendFile(errorLogFilename, `[${now}] Watcher media error: ${job.photo.location}. Exception: ${e}\n`).catch(() => { });
+                const reason = e instanceof Error ? e.message : String(e);
+                const message = reason.includes(job.photo.location) ? reason : `${job.photo.location}: ${reason}`;
+                console.error(`[media] ${message}`);
+                await fs.appendFile(errorLogFilename, `[${now}] [media] ${message}\n`).catch(() => { });
             }
         }
     } catch (e) {

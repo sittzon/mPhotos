@@ -108,8 +108,10 @@ function drainRepairQueue(): void {
         generateMedia(photoMeta)
             .catch(async (e) => {
                 const now = new Date().toISOString();
-                console.error(`Error generating missing media for ${photoMeta.location}:`, e);
-                await fs.appendFile(errorLogFilename, `[${now}] Error generating media: ${photoMeta.location}. Exception: ${e}\n`).catch(() => { });
+                const reason = e instanceof Error ? e.message : String(e);
+                const message = reason.includes(photoMeta.location) ? reason : `${photoMeta.location}: ${reason}`;
+                console.error(`[media] ${message}`);
+                await fs.appendFile(errorLogFilename, `[${now}] [media] ${message}\n`).catch(() => { });
             })
             .finally(() => {
                 activeRepairs--;

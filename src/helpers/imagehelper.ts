@@ -225,33 +225,51 @@ export async function getFileContentHash(filePath: string): Promise<string> {
 
 // Resize and save as webp
 export async function generateThumbnailBytes(imagePath: string, w: number, h: number, outPath: string, quality = 80, isHeic: boolean = false): Promise<void> {
-    let sharpBuffer: sharp.Sharp;
-    const inputBuffer = await fs.readFile(imagePath);
-    if (isHeic) {
-        const outputBuffer = await heicConvert({
-            buffer: inputBuffer, // the HEIC file buffer
-            format: 'JPEG',      // output format
-            quality: 1           // the jpeg compression quality, between 0 and 1
-        });
-        sharpBuffer = await sharp(outputBuffer).rotate(); // Auto-rotate based on EXIF
-    }
-    else {
-        sharpBuffer = await sharp(inputBuffer).rotate() // Auto-rotate based on EXIF
-    }
-
-    var webFile = sharpBuffer
-        .resize(w, h, { fit: 'inside' })
-        .webp({ quality })
     try {
+        let sharpBuffer: sharp.Sharp;
+        const inputBuffer = await fs.readFile(imagePath);
+        if (isHeic) {
+            const outputBuffer = await heicConvert({
+                buffer: inputBuffer, // the HEIC file buffer
+                format: 'JPEG',      // output format
+                quality: 1           // the jpeg compression quality, between 0 and 1
+            });
+            sharpBuffer = await sharp(outputBuffer).rotate(); // Auto-rotate based on EXIF
+        }
+        else {
+            sharpBuffer = await sharp(inputBuffer).rotate() // Auto-rotate based on EXIF
+        }
+
+        const webFile = sharpBuffer
+            .resize(w, h, { fit: 'inside' })
+            .webp({ quality });
         await webFile.toFile(outPath);
     } catch (e) {
-        console.log('Error saving image:', e);
+        const reason = e instanceof Error ? e.message : String(e);
+        let fileInfo = '';
+        try {
+            const stat = await fs.stat(imagePath);
+            fileInfo = ` size=${stat.size} mtime=${stat.mtime.toISOString()}`;
+        } catch {
+            // The source may have been removed while we were reading it.
+        }
+        console.error(`[media] FAILED ${imagePath}${fileInfo} -> ${outPath}: ${reason}`);
     }
 }
 
 // Generate a thumbnail from a video file using ffmpeg
 export async function generateVideoThumbnail(videoPath: string, outPath: string, w: number, h: number, timeSeconds = 1): Promise<void> {
-    const duration = await getVideoDuration(videoPath);
+    const fail = (e: unknown): Error => {
+        const reason = e instanceof Error ? e.message : String(e);
+        return new Error(`Video thumbnail generation failed for ${videoPath} -> ${outPath}: ${reason}`);
+    };
+
+    let duration: number;
+    try {
+        duration = await getVideoDuration(videoPath);
+    } catch (e) {
+        throw fail(e);
+    }
     timeSeconds = Math.min(timeSeconds, Math.max(0, duration - 0.5));
 
     const tmpFile = path.join(os.tmpdir(), `${crypto.randomUUID()}.png`);
@@ -269,7 +287,7 @@ export async function generateVideoThumbnail(videoPath: string, outPath: string,
                 try {
                     const exists = await fs.stat(tmpFile).then(() => true).catch(() => false);
                     if (!exists) {
-                        reject(new Error('ffmpeg exited 0 but no frame was produced'));
+                        reject(fail(new Error('ffmpeg exited 0 but no frame was produced')));
                         return;
                     }
                     await sharp(tmpFile)
@@ -280,23 +298,28 @@ export async function generateVideoThumbnail(videoPath: string, outPath: string,
                     resolve();
                 } catch (err) {
                     await fs.unlink(tmpFile).catch(() => {});
-                    reject(err);
+                    reject(fail(err));
                 }
             } else {
                 await fs.unlink(tmpFile).catch(() => {});
-                reject(new Error(`ffmpeg exited with code ${code}`));
+                reject(fail(new Error(`ffmpeg exited with code ${code}`)));
             }
         });
 
         ffmpeg.on('error', async (err) => {
             await fs.unlink(tmpFile).catch(() => {});
-            reject(err);
+            reject(fail(err));
         });
     });
 }
 
 // Generate a low-res loop clip for grid display (360px wide, no audio)
 export async function generateVideoLoopClip(videoPath: string, outPath: string): Promise<void> {
+    const fail = (e: unknown): Error => {
+        const reason = e instanceof Error ? e.message : String(e);
+        return new Error(`Video loop generation failed for ${videoPath} -> ${outPath}: ${reason}`);
+    };
+
     return new Promise((resolve, reject) => {
         const ffmpeg = spawn('ffmpeg', [
             '-i', videoPath,
@@ -312,12 +335,11 @@ export async function generateVideoLoopClip(videoPath: string, outPath: string):
             if (code === 0) {
                 resolve();
             } else {
-                console.log('Error generating loop clip, ffmpeg exited with code:', code);
-                reject(new Error('Failed to generate loop clip'));
+                reject(fail(new Error(`ffmpeg exited with code ${code}`)));
             }
         });
         ffmpeg.on('error', (err) => {
-            reject(err);
+            reject(fail(err));
         });
     });
 }
