@@ -1,9 +1,23 @@
 import type { RequestHandler } from '@sveltejs/kit';
 import { guidToLocation } from '$helpers/filehelper';
+import { getStatEtag, isNotModified, MEDIA_CACHE_CONTROL } from '$helpers/cachehelper';
+import { parseRangeHeader } from '$helpers/rangehelper';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 
 const videoExts = ['.mp4', '.mov'];
+
+// Readable.toWeb() is a pull-based adapter: it only reads more of the file when
+// the client actually consumes the response. The previous manual ReadableStream
+// enqueued every 'data' event immediately and buffered the whole file in memory
+// for slow clients.
+function streamResponse(stream: fs.ReadStream, status: number, headers: Record<string, string>): Response {
+    return new Response(Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>, {
+        status,
+        headers
+    });
+}
 
 export const GET: RequestHandler = async ({ request, params }) => {
     const guid = params.guid as string;
@@ -12,58 +26,57 @@ export const GET: RequestHandler = async ({ request, params }) => {
 
     // Confirm that file is video
     const ext = path.extname(location).toLowerCase();
-    const isVideo = videoExts.includes(ext);
-    if (isVideo) {
-        const stat = fs.statSync(location);
-        const fileSize = stat.size;
-        const range = request.headers.get('range');
-        const mimeType = ext === '.mp4' ? 'video/mp4' : ext === '.mov' ? 'video/quicktime' : 'application/octet-stream';
+    if (!videoExts.includes(ext)) return new Response('File is not of type video', { status: 404 });
 
-        // Helper to convert Node.js stream to web ReadableStream
-        function nodeStreamToWeb(stream: fs.ReadStream) {
-            return new ReadableStream({
-                start(controller) {
-                    stream.on('data', chunk => controller.enqueue(chunk));
-                    stream.on('end', () => controller.close());
-                    stream.on('error', err => controller.error(err));
-                },
-                cancel() {
-                    stream.destroy();
-                }
-            });
-        }
+    const stat = await fs.promises.stat(location).catch(() => null);
+    if (!stat) return new Response('Not found', { status: 404 });
 
-        if (!range) {
-            // No range header: send the entire file
-            console.log("Serving full video:", location);
-            const fileStream = fs.createReadStream(location);
-            return new Response(nodeStreamToWeb(fileStream), {
-                status: 200,
-                headers: {
-                    'Content-Length': fileSize.toString(),
-                    'Content-Type': mimeType,
-                    'Accept-Ranges': 'bytes',
-                }
-            });
-        }
+    const fileSize = stat.size;
+    const etag = getStatEtag(stat);
+    const mimeType = ext === '.mp4' ? 'video/mp4' : 'video/quicktime';
+    const range = parseRangeHeader(request.headers.get('range'), fileSize);
 
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunksize = end - start + 1;
-
-        const fileStream = fs.createReadStream(location, { start, end });
-        const headers = {
-            "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-            "Accept-Ranges": "bytes",
-            "Content-Length": chunksize.toString(),
-            "Content-Type": mimeType,
-        };
-
-        console.log("Streaming video:", guid, `bytes ${start}-${end}/${fileSize}`);
-
-        return new Response(nodeStreamToWeb(fileStream), { status: 206, headers });
+    if (range.type === 'invalid') {
+        return new Response('Invalid range', { status: 400 });
+    }
+    if (range.type === 'unsatisfiable') {
+        return new Response(null, {
+            status: 416,
+            headers: {
+                'Content-Range': `bytes */${fileSize}`,
+                'Accept-Ranges': 'bytes'
+            }
+        });
     }
 
-    return new Response('File is not of type video', { status: 404 });
+    if (range.type === 'none') {
+        if (isNotModified(request.headers.get('if-none-match'), etag)) {
+            return new Response(null, {
+                status: 304,
+                headers: { 'ETag': etag, 'Cache-Control': MEDIA_CACHE_CONTROL }
+            });
+        }
+
+        console.log('Serving full video:', location);
+        return streamResponse(fs.createReadStream(location), 200, {
+            'Content-Length': fileSize.toString(),
+            'Content-Type': mimeType,
+            'Accept-Ranges': 'bytes',
+            'ETag': etag,
+            'Cache-Control': MEDIA_CACHE_CONTROL
+        });
+    }
+
+    const { start, end } = range;
+    const chunksize = end - start + 1;
+    console.log('Streaming video:', guid, `bytes ${start}-${end}/${fileSize}`);
+
+    return streamResponse(fs.createReadStream(location, { start, end }), 206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize.toString(),
+        'Content-Type': mimeType,
+        'ETag': etag,
+        'Cache-Control': MEDIA_CACHE_CONTROL
+    });
 };

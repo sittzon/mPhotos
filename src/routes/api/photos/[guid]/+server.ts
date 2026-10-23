@@ -1,7 +1,18 @@
 import type { RequestHandler } from '@sveltejs/kit';
 import fs from 'fs/promises';
+import { createReadStream } from 'fs';
+import { Readable } from 'stream';
+import path from 'path';
 import { guidToLocation } from '$helpers/filehelper';
 import { getStatEtag, isNotModified, mediaCacheHeaders, MEDIA_CACHE_CONTROL } from '$helpers/cachehelper';
+
+const contentTypes: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.heic': 'image/heic',
+    '.heif': 'image/heif',
+};
 
 export const GET: RequestHandler = async ({ request, params }) => {
     const guid = params.guid as string;
@@ -14,9 +25,17 @@ export const GET: RequestHandler = async ({ request, params }) => {
         if (isNotModified(request.headers.get('if-none-match'), etag)) {
             return new Response(null, { status: 304, headers: { 'ETag': etag, 'Cache-Control': MEDIA_CACHE_CONTROL } });
         }
-        const b = await fs.readFile(location);
-        // console.log(`Serving photo ${guid} from location ${location}, size: ${b.length}`);
-        return new Response(new Uint8Array(b), { status: 200, headers: mediaCacheHeaders('image/jpeg', etag) });
+        const contentType = contentTypes[path.extname(location).toLowerCase()] || 'application/octet-stream';
+        // Stream the original instead of buffering it: full-resolution files can be
+        // tens of megabytes and several concurrent viewers would otherwise pile up.
+        const body = Readable.toWeb(createReadStream(location)) as unknown as ReadableStream<Uint8Array>;
+        return new Response(body, {
+            status: 200,
+            headers: {
+                ...mediaCacheHeaders(contentType, etag),
+                'Content-Length': stat.size.toString()
+            }
+        });
     } catch {
         return new Response('Not found', { status: 404 });
     }

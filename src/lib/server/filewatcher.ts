@@ -1,50 +1,58 @@
-import chokidar, { FSWatcher } from 'chokidar';
+import chokidar from 'chokidar';
+import type { FSWatcher } from 'chokidar';
 import { env } from '$env/dynamic/private';
 import { memoryCache } from '$helpers/memorycache';
-import { photosMetaCacheKey, photosVersionKey } from '$helpers/filehelper';
-import { getFileContentHash, generateThumbnailBytes, generateVideoThumbnail, generateVideoLoopClip, getImageDimensions, getVideoDimensions, getVideoDuration, getDateTakenFromPath, shutdownExifTool } from '$helpers/imagehelper';
+import { photosMetaCacheKey, photosVersionKey, writeJsonAtomic, withIngestionLock, normalizeLivePhotoLinks } from '$helpers/filehelper';
+import { getHashString, getImageDimensions, getVideoDimensions, getVideoDuration, getDateTakenFromPath } from '$helpers/imagehelper';
+import { generateMedia, waitForMediaGeneration } from '$lib/server/media';
 import fs from 'fs/promises';
 import path from 'path';
-import type { PhotoServerModel, PhotoModel } from '$api';
+import type { PhotoServerModel } from '$api';
 
 const originalsDir = env.ORIGINAL_PHOTOS || '/originals';
 const thumbsDir = env.GENERATED_THUMBNAILS || '/thumbs';
 const metaDataFilename = path.join(thumbsDir, env.METADATA_FILE || 'metadata.json');
 const errorLogFilename = path.join(thumbsDir, env.ERRORS_FILE || 'errors.log');
-const thumbnailSizeWidth = Number(env.THUMBNAIL_SIZE) || 300;
-const mediumSizeWidth = Number(env.MEDIUM_SIZE) || 1200;
 const videoExts = ['.mp4', '.mov'];
 const imageExts = ['.jpg', '.jpeg', '.heic', '.heif', '.png'];
 
 let watcher: FSWatcher | null = null;
 let debounceTimer: NodeJS.Timeout | null = null;
 let pendingEvents: Map<string, 'add' | 'unlink' | 'change'> = new Map();
+let isProcessingEvents = false;
 
-function buildThumbnailPath(guid: string): { thumb: string; medium: string; dir: string } {
+function buildThumbnailPath(guid: string): { thumb: string; medium: string; loop: string; dir: string } {
     const sub1 = guid.substring(0, 2);
     const sub2 = guid.substring(2, 4);
     const dir = path.join(thumbsDir, sub1, sub2);
     return {
         dir,
         thumb: path.join(dir, guid + '.webp'),
-        medium: path.join(dir, guid + '-medium.webp')
+        medium: path.join(dir, guid + '-medium.webp'),
+        loop: path.join(dir, guid + '-loop.mp4')
     };
 }
 
 async function cleanupThumbnails(guid: string) {
-    const { dir, thumb, medium } = buildThumbnailPath(guid);
+    const { dir, thumb, medium, loop } = buildThumbnailPath(guid);
     await fs.unlink(thumb).catch(() => { });
     await fs.unlink(medium).catch(() => { });
+    await fs.unlink(loop).catch(() => { });
+    // Legacy name written by older versions of the watcher.
     await fs.unlink(path.join(dir, guid + '_loop.mp4')).catch(() => { });
 }
 
-function countDuplicates(photoMetadata: PhotoServerModel[]): Map<string, number> {
-    const hashCounts = new Map<string, number>();
-    for (const photo of photoMetadata) {
-        const count = hashCounts.get(photo.guid) || 0;
-        hashCounts.set(photo.guid, count + 1);
-    }
-    return hashCounts;
+// Find the still image that belongs to a Live Photo video (same path, different
+// extension). Case-insensitive because cameras are inconsistent with extensions.
+function findLivePhotoCompanion(videoPath: string, photos: PhotoServerModel[]): PhotoServerModel | undefined {
+    const dot = videoPath.lastIndexOf('.');
+    if (dot <= 0) return undefined;
+    const base = videoPath.substring(0, dot).toLowerCase();
+    return photos.find(photo => {
+        if (photo.type !== 'photo') return false;
+        const photoDot = photo.location.lastIndexOf('.');
+        return photoDot > 0 && photo.location.substring(0, photoDot).toLowerCase() === base;
+    });
 }
 
 function isValidFile(filePath: string): boolean {
@@ -57,37 +65,26 @@ async function indexSingleFile(filePath: string, existingPhotos: PhotoServerMode
     const name = path.basename(filePath);
     const stat = await fs.stat(filePath);
     const isVideo = videoExts.includes(ext);
-    
+
     let width = 0;
     let height = 0;
     let dateTaken = 'unknown';
-    let type: 'photo' | 'video' | 'live-photo-video' = 'photo';
+    let type: PhotoServerModel['type'] = 'photo';
     let lengthSeconds: number | null = null;
+    let referenceGuid: string | null = null;
 
     if (isVideo) {
         [width, height] = await getVideoDimensions(filePath);
         lengthSeconds = await getVideoDuration(filePath);
 
-        let dateTakenFromSidecar = false;
-        for (const imgExt of imageExts) {
-            const fileInfoWithoutExt = filePath.substring(0, filePath.lastIndexOf('.'));
-            const sidecarPath = fileInfoWithoutExt + imgExt;
-            const referencePhoto = existingPhotos.find(x => x.location === sidecarPath);
-            if (referencePhoto) {
-                dateTakenFromSidecar = true;
-                dateTaken = referencePhoto.dateTaken;
-                type = 'live-photo-video';
-                break;
-            }
-        }
-
-        if (!dateTakenFromSidecar) {
+        const referencePhoto = findLivePhotoCompanion(filePath, existingPhotos);
+        if (referencePhoto) {
+            dateTaken = referencePhoto.dateTaken;
+            type = 'live-photo-video';
+            referenceGuid = referencePhoto.guid;
+        } else {
             dateTaken = await getDateTakenFromPath(filePath) as string;
-            if (lengthSeconds < 4) {
-                type = 'live-photo-video';
-            } else {
-                type = 'video';
-            }
+            type = lengthSeconds < 4 ? 'short-video' : 'video';
         }
     } else {
         [width, height] = await getImageDimensions(filePath, ext);
@@ -95,7 +92,9 @@ async function indexSingleFile(filePath: string, existingPhotos: PhotoServerMode
     }
 
     return {
-        guid: await getFileContentHash(filePath),
+        // Hash the path, matching the initial indexer. Hashing content gave the same
+        // guid to duplicate files and changed a file's identity on every edit.
+        guid: getHashString(filePath),
         location: filePath,
         name: name,
         dateTaken: dateTaken,
@@ -103,136 +102,166 @@ async function indexSingleFile(filePath: string, existingPhotos: PhotoServerMode
         width: width,
         height: height,
         lengthSeconds: lengthSeconds,
-        sizeKb: Math.floor(stat.size / 1024)
+        sizeKb: Math.floor(stat.size / 1024),
+        isFavorite: false,
+        isTrash: false,
+        sidecarGuid: null,
+        referenceGuid: referenceGuid
     };
 }
 
-async function generateThumbnails(photoMeta: PhotoServerModel) {
-    const ext = path.extname(photoMeta.location).toLowerCase();
-    const isHeic = ext === '.heic' || ext === '.heif';
-    const { dir, thumb, medium } = buildThumbnailPath(photoMeta.guid);
-    await fs.mkdir(dir, { recursive: true });
-
-    const isVideo = photoMeta.type === 'video' || photoMeta.type === 'live-photo-video';
-
-    const thumbExists = await fs.stat(thumb).then(() => true).catch(() => false);
-    if (!thumbExists) {
-        const w = thumbnailSizeWidth;
-        const h = Math.floor(photoMeta.height * (w / photoMeta.width));
-        if (isVideo) {
-            await generateVideoThumbnail(photoMeta.location, thumb, w, h);
-        } else {
-            await generateThumbnailBytes(photoMeta.location, w, h, thumb, 80, isHeic);
-        }
-    }
-
-    const mediumExists = await fs.stat(medium).then(() => true).catch(() => false);
-    const mediumSizeWidthMin = Math.min(photoMeta.width, mediumSizeWidth);
-    const mediumSizeHeight = Math.floor(photoMeta.height * (mediumSizeWidthMin / photoMeta.width));
-    if (!mediumExists) {
-        if (isVideo) {
-            await generateVideoThumbnail(photoMeta.location, medium, mediumSizeWidthMin, mediumSizeHeight, 1);
-        } else {
-            await generateThumbnailBytes(photoMeta.location, mediumSizeWidthMin, mediumSizeHeight, medium, 99, isHeic);
-        }
-    }
-
-    // Generate low-res loop clip for live photo videos
-    if (photoMeta.type === 'live-photo-video') {
-        const loopClipPath = path.join(dir, photoMeta.guid + '_loop.mp4');
-        const loopExists = await fs.stat(loopClipPath).then(() => true).catch(() => false);
-        if (!loopExists) {
-            await generateVideoLoopClip(photoMeta.location, loopClipPath);
-        }
-    }
-}
-
 async function processPendingEvents() {
-    const events = new Map(pendingEvents);
-    pendingEvents.clear();
-    
-    let photoMetadata: PhotoServerModel[] = memoryCache[photosMetaCacheKey] || [];
-    if (photoMetadata.length === 0) {
-        try {
-            const metaRaw = await fs.readFile(metaDataFilename, 'utf-8');
-            photoMetadata = JSON.parse(metaRaw);
-        } catch {
-            console.log('No existing metadata to sync with');
-            return;
-        }
-    }
+    if (isProcessingEvents) return;
+    isProcessingEvents = true;
 
-    const hashCounts = countDuplicates(photoMetadata);
-    const existingHashes = new Set(photoMetadata.map(p => p.guid));
+    // Media jobs are collected while the metadata lock is held and executed after
+    // it is released. ffmpeg/sharp can take seconds per file; holding the ingestion
+    // lock for that long would stall the initial indexer (and therefore first load).
+    const mediaJobs: Array<{ photo: PhotoServerModel; force: boolean }> = [];
 
-    for (const [filePath, eventType] of events) {
-        if (!isValidFile(filePath)) continue;
+    try {
+        // Serialize with the initial indexer. Without this, the watcher could read
+        // a partially built metadata array and write it back over the indexer.
+        await withIngestionLock(async () => {
+            const events = new Map(pendingEvents);
+            pendingEvents.clear();
+            if (events.size === 0) return;
 
-        try {
-            if (eventType === 'add' || eventType === 'change') {
-                const exists = await fs.stat(filePath).then(() => true).catch(() => false);
-                if (!exists) continue;
+            let photoMetadata: PhotoServerModel[] = Array.isArray(memoryCache[photosMetaCacheKey])
+                ? [...(memoryCache[photosMetaCacheKey] as PhotoServerModel[])]
+                : [];
 
-                console.log(`File ${eventType}: ${filePath}`);
-                
-                const existingIndex = photoMetadata.findIndex(p => p.location === filePath);
-                if (existingIndex !== -1) {
-                    const existing = photoMetadata[existingIndex];
-                    await cleanupThumbnails(existing.guid);
-                    photoMetadata.splice(existingIndex, 1);
-                    existingHashes.delete(existing.guid);
+            if (photoMetadata.length === 0) {
+                try {
+                    const metaRaw = await fs.readFile(metaDataFilename, 'utf-8');
+                    const parsed = JSON.parse(metaRaw);
+                    if (Array.isArray(parsed)) photoMetadata = parsed;
+                } catch {
+                    console.log('No existing metadata to sync with');
                 }
+            }
 
-                const photoMeta = await indexSingleFile(filePath, photoMetadata);
-                if (!photoMeta) continue;
+            normalizeLivePhotoLinks(photoMetadata);
 
-                const isDuplicate = existingHashes.has(photoMeta.guid);
-                if (isDuplicate) {
-                    const original = photoMetadata.find(p => p.guid === photoMeta.guid);
-                    if (original) {
-                        photoMeta.duplicateOf = original.guid;
-                    }
-                }
-                existingHashes.add(photoMeta.guid);
-                photoMetadata.push(photoMeta);
+            for (const [filePath, eventType] of events) {
+                if (!isValidFile(filePath)) continue;
 
-                await generateThumbnails(photoMeta);
-            } 
-            else if (eventType === 'unlink') {
-                console.log(`File deleted: ${filePath}`);
-                
-                const existingIndex = photoMetadata.findIndex(p => p.location === filePath);
-                if (existingIndex !== -1) {
-                    const removed = photoMetadata[existingIndex];
-                    const remainingForHash = photoMetadata.filter(p => p.guid === removed.guid && p.location !== filePath);
-                    
-                    if (remainingForHash.length === 0) {
-                        await cleanupThumbnails(removed.guid);
-                    } else {
-                        const original = photoMetadata.find(p => p.guid === removed.guid && !p.duplicateOf);
-                        if (original && removed.duplicateOf === original.guid) {
-                            const newPrimary = remainingForHash[0];
-                            for (const dup of remainingForHash) {
-                                dup.duplicateOf = undefined;
+                try {
+                    if (eventType === 'add' || eventType === 'change') {
+                        const exists = await fs.stat(filePath).then(() => true).catch(() => false);
+                        if (!exists) continue;
+
+                        console.log(`File ${eventType}: ${filePath}`);
+
+                        const existingIndex = photoMetadata.findIndex(p => p.location === filePath);
+                        let wasIndexed = false;
+                        if (existingIndex !== -1) {
+                            const existing = photoMetadata[existingIndex];
+                            wasIndexed = true;
+                            // Let any in-flight repair finish using the old guid, then
+                            // remove its outputs before regenerating from the new file.
+                            await waitForMediaGeneration(existing.guid);
+                            await cleanupThumbnails(existing.guid);
+                            photoMetadata.splice(existingIndex, 1);
+                        }
+
+                        const photoMeta = await indexSingleFile(filePath, photoMetadata);
+                        if (!photoMeta) continue;
+
+                        photoMetadata.push(photoMeta);
+                        mediaJobs.push({ photo: photoMeta, force: wasIndexed });
+
+                        // If a still image was added after its Live Photo video, promote
+                        // the already-indexed short video now instead of on next restart.
+                        if (!videoExts.includes(path.extname(filePath).toLowerCase())) {
+                            const videoCompanion = findVideoCompanion(filePath, photoMetadata);
+                            if (videoCompanion) {
+                                videoCompanion.type = 'live-photo-video';
+                                videoCompanion.referenceGuid = photoMeta.guid;
+                                videoCompanion.dateTaken = photoMeta.dateTaken;
+                                mediaJobs.push({ photo: videoCompanion, force: false });
                             }
                         }
                     }
-                    photoMetadata.splice(existingIndex, 1);
+                    else if (eventType === 'unlink') {
+                        console.log(`File deleted: ${filePath}`);
+
+                        const existingIndex = photoMetadata.findIndex(p => p.location === filePath);
+                        if (existingIndex !== -1) {
+                            const removed = photoMetadata[existingIndex];
+                            await waitForMediaGeneration(removed.guid);
+                            await cleanupThumbnails(removed.guid);
+                            photoMetadata.splice(existingIndex, 1);
+
+                            // Clear links pointing at the removed entry. If a still was
+                            // deleted, its video becomes a standalone clip and needs a poster.
+                            for (const photo of photoMetadata) {
+                                if (photo.referenceGuid === removed.guid) {
+                                    photo.referenceGuid = null;
+                                    if (photo.type === 'live-photo-video') {
+                                        photo.type = photo.lengthSeconds != null && photo.lengthSeconds < 4
+                                            ? 'short-video'
+                                            : 'video';
+                                        mediaJobs.push({ photo, force: false });
+                                    }
+                                }
+                                if (photo.sidecarGuid === removed.guid) {
+                                    photo.sidecarGuid = null;
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error(`Error processing ${eventType} for ${filePath}:`, e);
+                    const now = new Date().toISOString();
+                    await fs.appendFile(errorLogFilename, `[${now}] Watcher error: ${filePath}. Exception: ${e}\n`);
                 }
             }
-        } catch (e) {
-            console.error(`Error processing ${eventType} for ${filePath}:`, e);
-            const now = new Date().toISOString();
-            await fs.appendFile(errorLogFilename, `[${now}] Watcher error: ${filePath}. Exception: ${e}\n`);
-        }
-    }
 
-    photoMetadata.sort((a, b) => a.dateTaken.localeCompare(b.dateTaken));
-    memoryCache[photosMetaCacheKey] = photoMetadata;
-    memoryCache[photosVersionKey] = (memoryCache[photosVersionKey] || 0) + 1;
-    await fs.writeFile(metaDataFilename, JSON.stringify(photoMetadata));
-    console.log('Metadata updated from file watcher');
+            normalizeLivePhotoLinks(photoMetadata);
+            photoMetadata.sort((a, b) => a.dateTaken.localeCompare(b.dateTaken));
+
+            await writeJsonAtomic(metaDataFilename, photoMetadata);
+            memoryCache[photosMetaCacheKey] = photoMetadata;
+            memoryCache[photosVersionKey] = (memoryCache[photosVersionKey] || 0) + 1;
+            console.log('Metadata updated from file watcher');
+        });
+
+        // Generate/replace media after the metadata lock has been released.
+        for (const job of mediaJobs) {
+            try {
+                await generateMedia(job.photo, { force: job.force });
+            } catch (e) {
+                console.error(`Error generating media for ${job.photo.location}:`, e);
+                const now = new Date().toISOString();
+                await fs.appendFile(errorLogFilename, `[${now}] Watcher media error: ${job.photo.location}. Exception: ${e}\n`).catch(() => { });
+            }
+        }
+    } catch (e) {
+        // Previously an unhandled rejection here would take down the process.
+        console.error('Error processing file watcher batch:', e);
+        const now = new Date().toISOString();
+        await fs.appendFile(errorLogFilename, `[${now}] Watcher batch error. Exception: ${e}\n`).catch(() => { });
+    } finally {
+        isProcessingEvents = false;
+        // Events that arrived while this batch was waiting for the lock (or while
+        // it was running) need another pass.
+        if (pendingEvents.size > 0) scheduleSync();
+    }
 }
+
+function findVideoCompanion(photoPath: string, photos: PhotoServerModel[]): PhotoServerModel | undefined {
+    const dot = photoPath.lastIndexOf('.');
+    if (dot <= 0) return undefined;
+    const base = photoPath.substring(0, dot).toLowerCase();
+    return photos.find(photo => {
+        if (!videoExts.includes(path.extname(photo.location).toLowerCase())) return false;
+        const photoDot = photo.location.lastIndexOf('.');
+        if (photoDot <= 0 || photo.location.substring(0, photoDot).toLowerCase() !== base) return false;
+        return photo.lengthSeconds != null && photo.lengthSeconds < 6;
+    });
+}
+
 
 function scheduleSync() {
     if (debounceTimer) {
